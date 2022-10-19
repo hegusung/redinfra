@@ -1,0 +1,5 @@
+
+[AWS]
+access_key_id = AWS_KEY
+secret_access_key = SECRET
+session_token = 
