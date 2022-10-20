@@ -25,6 +25,59 @@ class AWS:
                 ),
                 ))
 
+    def show_config(self):
+        config = []
+
+        # Get elastic_ip
+        elastic_ips = {}
+        for client_tuple in self.clients:
+            region, client, _ = client_tuple
+
+            response = client.describe_addresses()
+            for address in response["Addresses"]:
+                ip = address["PublicIp"]
+                if "InstanceId" in address:
+                    elastic_ips[ip] = address["InstanceId"]
+
+        # List domains
+        linked_ips = []
+        for client_tuple in self.clients:
+            region, _, client = client_tuple
+
+            response = client.list_hosted_zones()
+            for zone in response["HostedZones"]:
+                domain = zone["Name"][:-1]
+
+                response_zone = client.list_resource_record_sets(
+                    HostedZoneId=zone['Id']
+                )
+                for item in response_zone["ResourceRecordSets"]:
+                    dns = item['Name']
+                    dns_type = item['Type']
+
+                    if not dns_type in ['A', 'AAAA']:
+                        continue
+
+                    for ip in item['ResourceRecords']:
+                        ip = ip['Value']
+
+                        if ip in elastic_ips:
+                            config.append([dns, ip, elastic_ips[ip]])
+                            linked_ips.append(ip)
+                        else:
+                            config.append([dns, ip, None])
+
+        linked_ips = list(set(linked_ips))
+
+        for ip in linked_ips:
+            del elastic_ips[ip]
+
+        for ip, instance in elastic_ips.items():
+            config.append([None, ip, instance])
+
+        return config
+
+
     def list_aws(self):
         print("AWS Instances")
         for client_tuple in self.clients:
