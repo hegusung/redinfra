@@ -25,9 +25,10 @@ def main():
     vpn_group.add_argument('--remove-vpn-ip', nargs=1, metavar=("Instance",), type=str, help='Remove Instance local VPN IP', dest='remove_vpn_ip')
 
     routing_group = parser.add_argument_group("Routing")
-    routing_group.add_argument('--set-routing', nargs=2, metavar=("Instance", "IP"), type=str, help='Set a route between an Instance and an IP', dest='set_routing')
+    routing_group.add_argument('--set-routing', nargs=3, metavar=("Instance", "IP", "Ports"), type=str, help='Set a route between an Instance and an IP', dest='set_routing')
     routing_group.add_argument('--list-routing', action='store_true', help='List routing', dest='list_routing')
     routing_group.add_argument('--remove-routing', nargs=1, metavar=("Instance",), type=str, help='Remove a specific route', dest='remove_routing')
+    routing_group.add_argument('--apply', action='store_true', help='Apply routing', dest='apply')
 
 
     args = parser.parse_args()
@@ -70,13 +71,16 @@ def main():
         routing.remove_vpn_ip(args.remove_vpn_ip[0])
 
     if args.set_routing:
-        routing.set_routing(args.set_routing[0], args.set_routing[1])
+        routing.set_routing(args.set_routing[0], args.set_routing[1], args.set_routing[2])
 
     if args.list_routing:
         routing.list_routing()
 
     if args.remove_routing:
         routing.remove_routing(args.remove_routing[0])
+
+    if args.apply:
+        routing.apply()
 
 
     if args.show_config:
