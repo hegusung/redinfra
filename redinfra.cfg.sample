@@ -2,4 +2,10 @@
 [AWS]
 access_key_id = AWS_KEY
 secret_access_key = SECRET
-session_token = 
+
+[Routing]
+vpn_interface = tap0
+iptables_chain = redinfra
+vpn_range = 192.168.56.0/24
+rule_start_table = 10
+rule_priority = 30000
