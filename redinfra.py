@@ -10,6 +10,8 @@ def main():
 
     aws_group = parser.add_argument_group("AWS")
     aws_group.add_argument('--list-aws', action='store_true', help='List AWS instances', dest='list_aws')
+    aws_group.add_argument('--start-aws', type=str, help='Start AWS instance', dest='start_aws')
+    aws_group.add_argument('--stop-aws', type=str, help='Stop AWS instance', dest='stop_aws')
     aws_group.add_argument('--list-elastic-ips', action='store_true', help='List AWS Elastic IPs', dest='list_elastic_ips')
     aws_group.add_argument('--renew-ip', type=str, help='Renew Elastic IPs', dest='renew_ip')
     aws_group.add_argument('--associate-ip', nargs=2, metavar=("IP", "Instance"), type=str, help='Associate Elastic IPs with an instance', dest='associate_ip')
@@ -37,6 +39,12 @@ def main():
 
     if args.list_aws:
         aws.list_aws()
+
+    if args.start_aws:
+        aws.start_instance(args.start_aws)
+
+    if args.stop_aws:
+        aws.stop_instance(args.stop_aws)
 
     if args.list_elastic_ips:
         aws.list_elastic_ips()

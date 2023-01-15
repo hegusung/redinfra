@@ -88,6 +88,7 @@ class AWS:
             response = client.describe_instances()
             for reservation in response["Reservations"]:
                 for instance in reservation["Instances"]:
+                    state = instance['State']['Name']
                     instance_id = instance['InstanceId']
                     public_ips = []
 
@@ -95,7 +96,7 @@ class AWS:
                         if "Association" in association:
                             public_ips.append(association["Association"]["PublicIp"])
 
-                    print(" - %s [%s]" % (instance_id, ", ".join(public_ips)))
+                    print(" - %s [%s] (%s)" % (instance_id, ", ".join(public_ips), state))
 
     def list_elastic_ips(self):
         print("Elastic IPs")
@@ -111,6 +112,41 @@ class AWS:
                 else:
                     instance = "Not associated"
                 print(" - %s => %s" % (ip, instance))
+
+    def start_instance(self, instance_id):
+        print("> Starting instance %s" % (instance_id,))
+        found = False
+        for client_tuple in self.clients:
+            region, client, _ = client_tuple
+
+            response = client.describe_instances()
+            for reservation in response["Reservations"]:
+                for instance in reservation["Instances"]:
+                    if instance_id == instance['InstanceId']:
+                        found = True
+                        client.start_instances(InstanceIds=[instance_id], DryRun=False)
+
+        if not found:
+            print("> Unable to start instance, not found")
+
+    def stop_instance(self, instance_id):
+        print("> Stopping instance %s" % instance_id)
+        found = False
+        for client_tuple in self.clients:
+            region, client, _ = client_tuple
+
+            response = client.describe_instances()
+            for reservation in response["Reservations"]:
+                for instance in reservation["Instances"]:
+                    print(instance['InstanceId'])
+                    if instance_id == instance['InstanceId']:
+                        found = True
+                        client.stop_instances(InstanceIds=[instance_id], DryRun=False)
+
+        if not found:
+            print("> Unable to stop instance, not found")
+
+
 
     def renew_ip(self, ip):
         print("> Renewing IP %s" % ip)
