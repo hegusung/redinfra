@@ -18,8 +18,9 @@ def main():
     aws_group.add_argument('--dissociate-ip', metavar="IP", type=str, help='Dissociate Elastic IPs from an instance', dest='dissociate_ip')
 
     aws_group.add_argument('--list-dns', action='store_true', help='List DNS entry', dest='list_dns')
-    aws_group.add_argument('--new-dns', nargs=2, metavar=("DNS", "IP"), type=str, help='Register new DNS', dest='new_dns')
-    aws_group.add_argument('--remove-dns', nargs=2, metavar=("DNS", "IP"), type=str, help='Remove DNS entry', dest='remove_dns')
+    aws_group.add_argument('--new-dns', nargs=2, metavar=("DNS", "Value"), type=str, help='Register new DNS', dest='new_dns')
+    aws_group.add_argument('--remove-dns', nargs=2, metavar=("DNS", "Value"), type=str, help='Remove DNS entry', dest='remove_dns')
+    aws_group.add_argument('--dns-type', default='A', type=str, help='DNS entry type', dest='dns_type')
 
     vpn_group = parser.add_argument_group("VPN")
     vpn_group.add_argument('--set-vpn-ip', nargs=2, metavar=("Instance", "IP"), type=str, help='Set an Instance local VPN IP', dest='set_vpn_ip')
@@ -62,10 +63,10 @@ def main():
         aws.list_dns()
 
     if args.new_dns:
-        aws.new_dns(args.new_dns[0], args.new_dns[1])
+        aws.new_dns(args.new_dns[0], args.new_dns[1], args.dns_type)
 
     if args.remove_dns:
-        aws.remove_dns(args.remove_dns[0], args.remove_dns[1])
+        aws.remove_dns(args.remove_dns[0], args.remove_dns[1], args.dns_type)
 
     routing = Routing()
 

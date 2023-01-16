@@ -3,15 +3,13 @@ import os
 import sys
 import configparser
 
-REGIONS = ['eu-west-3']
-
 class AWS:
     def __init__(self):
         self.config = configparser.ConfigParser(interpolation=None)
         self.config.read(os.path.join(os.path.dirname(sys.argv[0]), 'redinfra.cfg'))
 
         self.clients = []
-        for region in REGIONS:
+        for region in self.config.get('AWS', 'regions').split(','):
             self.clients.append((region,
                 boto3.client('ec2',
                     region_name=region,
@@ -41,31 +39,31 @@ class AWS:
 
         # List domains
         linked_ips = []
-        for client_tuple in self.clients:
-            region, _, client = client_tuple
+        client_tuple = self.clients[0] # Only use the first one
+        region, _, client = client_tuple
 
-            response = client.list_hosted_zones()
-            for zone in response["HostedZones"]:
-                domain = zone["Name"][:-1]
+        response = client.list_hosted_zones()
+        for zone in response["HostedZones"]:
+            domain = zone["Name"][:-1]
 
-                response_zone = client.list_resource_record_sets(
-                    HostedZoneId=zone['Id']
-                )
-                for item in response_zone["ResourceRecordSets"]:
-                    dns = item['Name']
-                    dns_type = item['Type']
+            response_zone = client.list_resource_record_sets(
+                HostedZoneId=zone['Id']
+            )
+            for item in response_zone["ResourceRecordSets"]:
+                dns = item['Name']
+                dns_type = item['Type']
 
-                    if not dns_type in ['A', 'AAAA']:
-                        continue
+                if not dns_type in ['A', 'AAAA']:
+                    continue
 
-                    for ip in item['ResourceRecords']:
-                        ip = ip['Value']
+                for ip in item['ResourceRecords']:
+                    ip = ip['Value']
 
-                        if ip in elastic_ips:
-                            config.append([dns, ip, elastic_ips[ip]])
-                            linked_ips.append(ip)
-                        else:
-                            config.append([dns, ip, None])
+                    if ip in elastic_ips:
+                        config.append([dns, ip, elastic_ips[ip]])
+                        linked_ips.append(ip)
+                    else:
+                        config.append([dns, ip, None])
 
         linked_ips = list(set(linked_ips))
 
@@ -82,7 +80,6 @@ class AWS:
         print("AWS Instances")
         for client_tuple in self.clients:
             region, client, _ = client_tuple
-            print(type(client))
 
             print("Region: %s" % region)
             response = client.describe_instances()
@@ -242,96 +239,107 @@ class AWS:
 
     def list_dns(self):
         print("DNS entries")
-        for client_tuple in self.clients:
-            region, _, client = client_tuple
+        client_tuple = self.clients[0] # Only use the first one
+        region, _, client = client_tuple
 
-            print("Region: %s" % region)
-            response = client.list_hosted_zones()
-            for zone in response["HostedZones"]:
-                domain = zone["Name"][:-1]
-                print("- Zone: %s" % domain)
+        response = client.list_hosted_zones()
+        for zone in response["HostedZones"]:
+            domain = zone["Name"][:-1]
+            print("- Zone: %s" % domain)
 
-                response_zone = client.list_resource_record_sets(
-                    HostedZoneId=zone['Id']
+            response_zone = client.list_resource_record_sets(
+                HostedZoneId=zone['Id']
+            )
+            for item in response_zone["ResourceRecordSets"]:
+                dns = item['Name']
+                dns_type = item['Type']
+
+                if not dns_type in ['A', 'MX', 'AAAA', 'TXT']:
+                    continue
+
+                for ip in item['ResourceRecords']:
+                    ip = ip['Value']
+
+                    print(" => %s IN %s %s" % (dns, dns_type, ip))
+
+    def new_dns(self, domain, value, dns_type='A'):
+        print("Setting new domain %s = %s => %s" % (domain, dns_type, value))
+
+        if dns_type == "TXT":
+            value = "\"%s\"" % value 
+        elif dns_type == "MX" and len(value.split()) != 2:
+            value = "10 %s" % value
+
+        client_tuple = self.clients[0] # Only use the first one
+        region, _, client = client_tuple
+
+        response = client.list_hosted_zones()
+        for zone in response["HostedZones"]:
+            _domain = zone["Name"][:-1]
+
+            if domain.endswith(_domain):
+                print("> Adding new domain %s with value %s (%s)" % (domain, value, dns_type))
+
+                response = client.change_resource_record_sets(
+                    ChangeBatch={
+                        'Changes': [
+                            {
+                                'Action': 'UPSERT',
+                                'ResourceRecordSet': {
+                                    'Name': domain,
+                                    'ResourceRecords': [
+                                        {
+                                            'Value': value,
+                                        },
+                                    ],
+                                    'TTL': 300,
+                                    'Type': dns_type,
+                                },
+                            },
+                        ],
+                    },
+                    HostedZoneId=zone['Id'],
                 )
-                for item in response_zone["ResourceRecordSets"]:
-                    dns = item['Name']
-                    dns_type = item['Type']
 
-                    if not dns_type in ['A', 'MX', 'AAAA']:
-                        continue
+                print("Domain %s added with value %s (%s)" % (domain, value, dns_type))
 
-                    for ip in item['ResourceRecords']:
-                        ip = ip['Value']
+    def remove_dns(self, domain, value, dns_type='A'):
+        print("Removing dns entry %s = %s => %s" % (domain, dns_type, value))
 
-                        print("  => %s IN A %s" % (dns, ip))
+        if dns_type == "TXT":
+            value = "\"%s\"" % value 
+        elif dns_type == "MX" and len(value.split()) != 2:
+            value = "10 %s" % value
 
-    def new_dns(self, domain, ip):
-        print("Setting new domain %s => %s" % (domain, ip))
-        for client_tuple in self.clients:
-            region, _, client = client_tuple
+        client_tuple = self.clients[0] # Only use the first one
+        region, _, client = client_tuple
 
-            response = client.list_hosted_zones()
-            for zone in response["HostedZones"]:
-                _domain = zone["Name"][:-1]
+        response = client.list_hosted_zones()
+        for zone in response["HostedZones"]:
+            _domain = zone["Name"][:-1]
 
-                if domain.endswith(_domain):
-                    print("> Adding new domain %s with ip %s" % (domain, ip))
+            if domain.endswith(_domain):
+                print("> Removing domain %s with value %s (%s)" % (domain, value, dns_type))
 
-                    response = client.change_resource_record_sets(
-                        ChangeBatch={
-                            'Changes': [
-                                {
-                                    'Action': 'UPSERT',
-                                    'ResourceRecordSet': {
-                                        'Name': domain,
-                                        'ResourceRecords': [
-                                            {
-                                                'Value': ip,
-                                            },
-                                        ],
-                                        'TTL': 300,
-                                        'Type': 'A',
-                                    },
+                response = client.change_resource_record_sets(
+                    ChangeBatch={
+                        'Changes': [
+                            {
+                                'Action': 'DELETE',
+                                'ResourceRecordSet': {
+                                    'Name': domain,
+                                    'ResourceRecords': [
+                                        {
+                                            'Value': value,
+                                        },
+                                    ],
+                                    'TTL': 300,
+                                    'Type': dns_type,
                                 },
-                            ],
-                        },
-                        HostedZoneId=zone['Id'],
-                    )
+                            },
+                        ],
+                    },
+                    HostedZoneId=zone['Id'],
+                )
 
-                    print("Domain %s added with IP %s" % (domain, ip))
-
-    def remove_dns(self, domain, ip):
-        print("Removing dns entry %s => %s" % (domain, ip))
-        for client_tuple in self.clients:
-            region, _, client = client_tuple
-
-            response = client.list_hosted_zones()
-            for zone in response["HostedZones"]:
-                _domain = zone["Name"][:-1]
-
-                if domain.endswith(_domain):
-                    print("> Removing domain %s with ip %s" % (domain, ip))
-
-                    response = client.change_resource_record_sets(
-                        ChangeBatch={
-                            'Changes': [
-                                {
-                                    'Action': 'DELETE',
-                                    'ResourceRecordSet': {
-                                        'Name': domain,
-                                        'ResourceRecords': [
-                                            {
-                                                'Value': ip,
-                                            },
-                                        ],
-                                        'TTL': 300,
-                                        'Type': 'A',
-                                    },
-                                },
-                            ],
-                        },
-                        HostedZoneId=zone['Id'],
-                    )
-
-                    print("Domain %s with IP %s removed" % (domain, ip))
+                print("Domain %s with value %s removed (%s)" % (domain, value, dns_type))
