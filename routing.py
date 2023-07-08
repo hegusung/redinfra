@@ -107,7 +107,10 @@ class Routing():
         for aws_instance, local_ip_ports in self.routing_config['Routing'].items():
             aws_vpn_ip = self.routing_config['VPN'][aws_instance]
             local_ip = local_ip_ports.split(':')[0]
-            ports = [int(p) for p in local_ip_ports.split(':')[1].split(',')]
+            if len(local_ip_ports.split(':')[1]) != 0:
+                ports = [int(p) for p in local_ip_ports.split(':')[1].split(',')]
+            else:
+                ports = []
 
             print("Creating iptable rule for %s -> %s:%s" % (aws_vpn_ip, local_ip, str(ports)))
             if len(ports) != 0:
