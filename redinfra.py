@@ -3,6 +3,7 @@ import argparse
 
 from aws import AWS
 from routing import Routing
+from colorama import Fore, Style
 
 def main():
     parser = argparse.ArgumentParser(description='RedInfra: red team infrastructure manager')
@@ -101,8 +102,10 @@ def main():
             dns = c[0]
             public_ip = c[1]
             instance = c[2]
-            vpn_ip = c[3]
-            node_ip = c[4]
+            instance_name = c[3]
+            instance_state = c[4]
+            vpn_ip = c[5]
+            node_ip = c[6]
 
             if dns != None:
                 dns = ("%s ===>   " % (dns,)).rjust(50)
@@ -110,14 +113,20 @@ def main():
                 dns = " "*50
 
             if instance != None:
-                row = dns + "[%s] %s [%s]" % (public_ip, instance, vpn_ip if vpn_ip != None else "")
+                row = dns + "[%s] (%s) %s [%s]" % (public_ip, instance_name, instance, vpn_ip if vpn_ip != None else "")
 
                 if node_ip != None:
                     row += "   <===>   %s" % node_ip
             else:
                 row = dns + "[%s]" % public_ip
 
-            print(row)
+            c = Fore.YELLOW
+            if instance_state == 'running':
+                c = Fore.GREEN
+            elif instance_state == 'stopped':
+                c = Fore.RED
+
+            print("%s%s%s" % (c, row, Style.RESET_ALL))
 
 if __name__ == '__main__':
     main()
