@@ -8,5 +8,6 @@ secret_access_key = SECRET
 vpn_interface = tap0
 iptables_chain = redinfra
 vpn_range = 192.168.56.0/24
+redirector_vpn_ip = 192.168.56.1
 rule_start_table = 10
 rule_priority = 30000

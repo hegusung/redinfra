@@ -2,6 +2,7 @@ import boto3
 import os
 import sys
 import configparser
+from colorama import Fore, Style
 
 class AWS:
     def __init__(self):
@@ -65,6 +66,23 @@ class AWS:
                     else:
                         config.append([dns, ip, None])
 
+        instance_dict = {}
+        for client_tuple in self.clients:
+            region, client, _ = client_tuple
+
+            response = client.describe_instances()
+            for reservation in response["Reservations"]:
+                for instance in reservation["Instances"]:
+
+                    instance_name = "Unknown"
+                    for tag in instance['Tags']:
+                        if tag['Key'] == 'Name':
+                            instance_name = tag['Value']
+                    state = instance['State']['Name']
+                    instance_id = instance['InstanceId']
+
+                    instance_dict[instance_id] = [instance_name, state]
+ 
         linked_ips = list(set(linked_ips))
 
         for ip in linked_ips:
@@ -73,7 +91,18 @@ class AWS:
         for ip, instance in elastic_ips.items():
             config.append([None, ip, instance])
 
-        return config
+        res = []
+        for conf in config:
+            inst = conf[2]
+            if inst != None:
+                if inst in instance_dict:
+                    res.append(conf + instance_dict[inst])
+                else:
+                    res.append(conf + [None, None])
+            else:
+                res.append(conf + [None, None])
+
+        return res
 
 
     def list_aws(self):
@@ -85,6 +114,12 @@ class AWS:
             response = client.describe_instances()
             for reservation in response["Reservations"]:
                 for instance in reservation["Instances"]:
+                    #print(instance)
+
+                    instance_name = "Unknown"
+                    for tag in instance['Tags']:
+                        if tag['Key'] == 'Name':
+                            instance_name = tag['Value']
                     state = instance['State']['Name']
                     instance_id = instance['InstanceId']
                     public_ips = []
@@ -93,7 +128,13 @@ class AWS:
                         if "Association" in association:
                             public_ips.append(association["Association"]["PublicIp"])
 
-                    print(" - %s [%s] (%s)" % (instance_id, ", ".join(public_ips), state))
+                    c = Fore.YELLOW
+                    if state == 'running':
+                        c = Fore.GREEN
+                    elif state == 'stopped':
+                        c = Fore.RED
+
+                    print("%s - %s (%s) [%s] (%s)%s" % (c, instance_id, instance_name, ", ".join(public_ips), state, Style.RESET_ALL))
 
     def list_elastic_ips(self):
         print("Elastic IPs")
@@ -135,7 +176,6 @@ class AWS:
             response = client.describe_instances()
             for reservation in response["Reservations"]:
                 for instance in reservation["Instances"]:
-                    print(instance['InstanceId'])
                     if instance_id == instance['InstanceId']:
                         found = True
                         client.stop_instances(InstanceIds=[instance_id], DryRun=False)
@@ -155,6 +195,8 @@ class AWS:
             for address in response["Addresses"]:
                 elastic_ip = address["PublicIp"]
                 allocation_id = address["AllocationId"]
+                if not 'AssociationId' in address:
+                    continue
                 association_id = address["AssociationId"]
 
                 if ip == elastic_ip:
@@ -221,6 +263,7 @@ class AWS:
             for address in response["Addresses"]:
                 elastic_ip = address["PublicIp"]
                 allocation_id = address["AllocationId"]
+                print(address)
                 association_id = address["AssociationId"]
 
                 if ip == elastic_ip:
@@ -266,7 +309,10 @@ class AWS:
         print("Setting new domain %s = %s => %s" % (domain, dns_type, value))
 
         if dns_type == "TXT":
-            value = "\"%s\"" % value 
+            if not value.startswith('"'):
+                value = '"' + value
+            if not value.endswith('"'):
+                value = value + '"'
         elif dns_type == "MX" and len(value.split()) != 2:
             value = "10 %s" % value
 

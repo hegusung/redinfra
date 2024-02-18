@@ -30,7 +30,7 @@ class Routing():
 
     def show_config(self, config):
         for c in config:
-            instance = c[-1]
+            instance = c[-3]
 
             if instance != None:
                 if instance in self.routing_config['VPN']:
@@ -95,6 +95,7 @@ class Routing():
         vpn_interface = self.config['Routing']['vpn_interface']
         redinfra_chain = self.config['Routing']['iptables_chain']
         vpn_range = self.config['Routing']['vpn_range']
+        redirector_vpn_ip = self.config['Routing']['redirector_vpn_ip']
         rule_priority = int(self.config['Routing']['rule_priority'])
 
         # flush
@@ -121,11 +122,15 @@ class Routing():
                     cmd = 'iptables -A FORWARD -s %s -d %s -p tcp --dport %d -j ACCEPT' % (aws_vpn_ip, local_ip, port)
                     print("> %s" % cmd)
                     os.system(cmd)
-                
-            cmd = 'iptables -t nat -A %s_snat -s %s -j SNAT --to-source 192.168.56.1' % (redinfra_chain, local_ip)
+            cmd = 'iptables -A FORWARD -d %s -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT' % (local_ip,)
             print("> %s" % cmd)
             os.system(cmd)
-            cmd = 'iptables -A FORWARD -s %s -d %s -j ACCEPT' % (local_ip, aws_vpn_ip)
+                
+            cmd = 'iptables -t nat -A %s_snat -s %s -j SNAT --to-source %s' % (redinfra_chain, local_ip, redirector_vpn_ip)
+            print("> %s" % cmd)
+            os.system(cmd)
+            #cmd = 'iptables -A FORWARD -s %s -d %s -j ACCEPT' % (local_ip, aws_vpn_ip)
+            cmd = 'iptables -A FORWARD -s %s -j ACCEPT' % (local_ip,)
             print("> %s" % cmd)
             os.system(cmd)
 
@@ -135,8 +140,11 @@ class Routing():
 
         table_id = int(self.config['Routing']['rule_start_table'])
         for aws_instance, local_ip in self.routing_config['Routing'].items():
+            print("==================")
+            print(aws_instance)
+            print(local_ip)
             aws_vpn_ip = self.routing_config['VPN'][aws_instance]
-            local_ip = local_ip_ports.split(':')[0]
+            local_ip = local_ip.split(':')[0]
 
             spec = {'src': '%s/32' % local_ip,
                     'table': table_id,
