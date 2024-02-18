@@ -48,7 +48,16 @@ class Routing():
         return config
 
     def set_vpn_ip(self, instance, ip):
-        self.routing_config['VPN'][instance] = ip
+        # Create a specific IP for the AWS 192.168.56.2 -> 192.168.56.102
+        ip_parts = ip.split('.')
+        if int(ip_parts[-1]) >= 100:
+            raise Exception("AWS VPN ip should be between 1 and 99")
+        ip_parts[-1] = str(int(ip_parts[-1]) + 100)
+        ip_router = ".".join(ip_parts)
+
+        print("[+] Instance ip: %s, Corresponding router ip: %s" % (ip, ip_router))
+
+        self.routing_config['VPN'][instance] = "%s:%s" % (ip, ip_router)
 
         with open(ROUTING_CONFIG_FILE, "w") as configfile:
             self.routing_config.write(configfile)
@@ -56,7 +65,9 @@ class Routing():
     def list_vpn_ip(self):
         print("Instances VPN IPs:")
         for instance, ip in self.routing_config['VPN'].items():
-            print(" - %s : %s" % (instance, ip))
+            ip_vpn_aws = ip.split(':')[0]
+            ip_vpn_router = ip.split(':')[-1]
+            print(" - %s : %s -> %s" % (instance, ip_vpn_aws, ip_vpn_router))
 
     def remove_vpn_ip(self, instance):
         try:
@@ -89,7 +100,7 @@ class Routing():
             self.routing_config.write(configfile)
 
     def apply(self):
-        print("Enabling ip_forward")
+        print("[+] Enabling ip_forward")
         os.system("echo 1 >/proc/sys/net/ipv4/ip_forward")
 
         vpn_interface = self.config['Routing']['vpn_interface']
@@ -104,24 +115,47 @@ class Routing():
         # Create default chain
         IPTablesManager.create_chain(redinfra_chain, vpn_range, vpn_interface)
 
+        # Enable packet marking
+        print("[+] Enabling packet marking")
+        cmd = 'iptables -t mangle -A PREROUTING -j CONNMARK --restore-mark'
+        print("> %s" % cmd)
+        os.system(cmd)
+
+
         # Create AWS to local node
+        # use table_id as the marking value
+        table_id = int(self.config['Routing']['rule_start_table'])
         for aws_instance, local_ip_ports in self.routing_config['Routing'].items():
-            aws_vpn_ip = self.routing_config['VPN'][aws_instance]
+            aws_vpn_ip = self.routing_config['VPN'][aws_instance].split(':')[0]
+            corresponding_vpn_ip = self.routing_config['VPN'][aws_instance].split(':')[-1]
             local_ip = local_ip_ports.split(':')[0]
             if len(local_ip_ports.split(':')[1]) != 0:
                 ports = [int(p) for p in local_ip_ports.split(':')[1].split(',')]
             else:
                 ports = []
 
-            print("Creating iptable rule for %s -> %s:%s" % (aws_vpn_ip, local_ip, str(ports)))
+            print("[+] Creating the IP %s in the VPN interface %s" % (corresponding_vpn_ip, vpn_interface))
+            range_subnet = vpn_range.split("/")[-1]
+            cmd = 'ip addr add %s/%s dev %s' % (corresponding_vpn_ip, range_subnet, vpn_interface)
+            print("> %s" % cmd)
+            os.system(cmd)
+
+            # Set the marking rule
+            print("[+] Marking packet destined to %s with mark %d" % (corresponding_vpn_ip, table_id))
+            cmd = 'iptables -t mangle -A PREROUTING -d %s -m state --state NEW -j CONNMARK --set-mark %d' % (corresponding_vpn_ip, table_id)
+            print("> %s" % cmd)
+            os.system(cmd)
+
+            print("[+] Creating iptable rule for %s -> %s:%s" % (aws_vpn_ip, local_ip, str(ports)))
             if len(ports) != 0:
                 for port in ports:
-                    cmd = 'iptables -t nat -A %s_dnat -p tcp -s %s --dport %d -j DNAT --to-destination %s' % (redinfra_chain, aws_vpn_ip, port, local_ip)
+                    cmd = 'iptables -t nat -A %s_dnat -p tcp -d %s --dport %d -j DNAT --to-destination %s' % (redinfra_chain, corresponding_vpn_ip, port, local_ip)
                     print("> %s" % cmd)
                     os.system(cmd)
-                    cmd = 'iptables -A FORWARD -s %s -d %s -p tcp --dport %d -j ACCEPT' % (aws_vpn_ip, local_ip, port)
+                    cmd = 'iptables -A FORWARD -d %s -p tcp --dport %d -j ACCEPT' % (aws_vpn_ip, port)
                     print("> %s" % cmd)
                     os.system(cmd)
+            # Accept already established connections
             cmd = 'iptables -A FORWARD -d %s -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT' % (local_ip,)
             print("> %s" % cmd)
             os.system(cmd)
@@ -134,25 +168,29 @@ class Routing():
             print("> %s" % cmd)
             os.system(cmd)
 
+            table_id += 1
+
         # Create outgoing rules
         ipdb = IPDB()
         ndb = NDB()
 
         table_id = int(self.config['Routing']['rule_start_table'])
         for aws_instance, local_ip in self.routing_config['Routing'].items():
-            print("==================")
-            print(aws_instance)
-            print(local_ip)
-            aws_vpn_ip = self.routing_config['VPN'][aws_instance]
+            #print("==================")
+            #print(aws_instance)
+            #print(local_ip)
+            aws_vpn_ip = self.routing_config['VPN'][aws_instance].split(':')[0]
+            corresponding_vpn_ip = self.routing_config['VPN'][aws_instance].split(':')[-1]
             local_ip = local_ip.split(':')[0]
 
             spec = {'src': '%s/32' % local_ip,
                     'table': table_id,
                     'priority': int(self.config['Routing']['rule_priority']),
                     }
-            print("Creating rule from %s to table %d" % (local_ip, table_id))
+            print("[+] Creating rule from %s to table %d" % (local_ip, table_id))
             try:
-                ndb.rules.create(src='%s/32' % local_ip, table=table_id, priority=int(self.config['Routing']['rule_priority'])).commit()
+                # fwmark same as table id
+                ndb.rules.create(src='%s/32' % local_ip, fwmark=table_id, table=table_id, priority=int(self.config['Routing']['rule_priority'])).commit()
             except Exception as e:
                 # Exception raised but it works....
                 pass
@@ -161,7 +199,7 @@ class Routing():
                     'table': table_id,
                     'gateway': aws_vpn_ip,
                     }
-            print("Creating default route to %s in table %d" % (aws_vpn_ip, table_id))
+            print("[+] Creating default route to %s in table %d" % (aws_vpn_ip, table_id))
             ndb.routes.create(dst='default', table=table_id, gateway=aws_vpn_ip).commit()
             #ipdb.routes.add(spec).commit()
 
@@ -207,6 +245,9 @@ class IPTablesManager():
         print("> %s" % cmd)
         os.system(cmd)
         cmd = "iptables -t nat -F %s_snat" % redinfra_chain
+        print("> %s" % cmd)
+        os.system(cmd)
+        cmd = "iptables -t mangle -F PREROUTING"
         print("> %s" % cmd)
         os.system(cmd)
         cmd = "iptables -F FORWARD"

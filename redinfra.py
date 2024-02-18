@@ -104,7 +104,12 @@ def main():
             instance = c[2]
             instance_name = c[3]
             instance_state = c[4]
-            vpn_ip = c[5]
+            if c[5] != None:
+                vpn_ip_aws = c[5].split(':')[0]
+                vpn_ip_router = c[5].split(':')[-1]
+            else:
+                vpn_ip_aws = None
+                vpn_ip_router = None
             node_ip = c[6]
 
             if dns != None:
@@ -113,10 +118,10 @@ def main():
                 dns = " "*50
 
             if instance != None:
-                row = dns + "[%s] (%s) %s [%s]" % (public_ip, instance_name, instance, vpn_ip if vpn_ip != None else "")
+                row = dns + "[%s] (%s) %s [%s] -> [%s]" % (public_ip, instance_name, instance, vpn_ip_aws if vpn_ip_aws != None else "", vpn_ip_router if vpn_ip_router != None else "")
 
                 if node_ip != None:
-                    row += "   <===>   %s" % node_ip
+                    row += " Redirector   <===>   %s" % node_ip
             else:
                 row = dns + "[%s]" % public_ip
 
