@@ -224,6 +224,20 @@ systemctl start openvpn-client@Node
 systemctl enable openvpn-client@Node
 ```
 
+#### Configure the VPN IP on the router
+
+Connect to the router, setup the VPN IP of the newly generated EC2 instance with the following command:
+```
+./redinfra.py --set-vpn-ip <aws_instance> <vpn_ip>
+```
+
+Save the given router IP, it will be useful for after... (on the instance config)
+
+VPN config can be listed with:
+```
+./redinfra.py --list-vpn-ip
+```
+
 #### Setup the routing on the instance
 
 Execute the following commands
@@ -235,8 +249,7 @@ net.ipv4.ip_forward = 1
 # setup iptables
 iptables -F FORWARD
 iptables -t nat -A POSTROUTING -s <ip_vpn_router> -j MASQUERADE
-iptables -t nat -A PREROUTING -d <ip_local_aws> -p tcp ! --dport 22 -j DNAT --to-destination <ip_vpn_router>
-iptables -t nat -A POSTROUTING -o tap0 -j SNAT --to-source <ip_vpn_aws>
+iptables -t nat -A PREROUTING -d <ip_local_aws> -p tcp ! --dport 22 -j DNAT --to-destination <ip_vpn_router_given>   # usually the ip + 100 given when saving the AWS VPN IP in redinfra.py
 
 # Make this persistent
 yum install iptables-services -y
@@ -245,14 +258,3 @@ systemctl start iptables
 service iptables save
 ```
 
-#### Configure the VPN IP on the router
-
-Connect to the router, setup the VPN IP of the newly generated EC2 instance with the following command:
-```
-./redinfra.py --set-vpn-ip <aws_instance> <vpn_ip>
-```
-
-VPN config can be listed with:
-```
-./redinfra.py --list-vpn-ip
-```

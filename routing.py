@@ -146,6 +146,11 @@ class Routing():
             print("> %s" % cmd)
             os.system(cmd)
 
+            #print("[+] Marking packet comming from %s with mark %d" % (local_ip, table_id))
+            #cmd = 'iptables -t mangle -A PREROUTING -s %s -m state --state NEW -j CONNMARK --set-mark %d' % (local_ip, table_id)
+            #print("> %s" % cmd)
+            #os.system(cmd)
+
             print("[+] Creating iptable rule for %s -> %s:%s" % (aws_vpn_ip, local_ip, str(ports)))
             if len(ports) != 0:
                 for port in ports:
@@ -190,7 +195,12 @@ class Routing():
             print("[+] Creating rule from %s to table %d" % (local_ip, table_id))
             try:
                 # fwmark same as table id
-                ndb.rules.create(src='%s/32' % local_ip, fwmark=table_id, table=table_id, priority=int(self.config['Routing']['rule_priority'])).commit()
+                ndb.rules.create(src='%s/32' % local_ip, fwmark=table_id, table=table_id, priority=int(self.config['Routing']['rule_priority'])-1).commit()
+            except Exception as e:
+                # Exception raised but it works....
+                pass
+            try:
+                ndb.rules.create(src='%s/32' % local_ip, table=table_id, priority=int(self.config['Routing']['rule_priority'])).commit()
             except Exception as e:
                 # Exception raised but it works....
                 pass
