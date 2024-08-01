@@ -9,6 +9,13 @@ class AWS:
         self.config = configparser.ConfigParser(interpolation=None)
         self.config.read(os.path.join(os.path.dirname(sys.argv[0]), 'redinfra.cfg'))
 
+        self.tags = []
+        self.filters = []
+        for item in self.config.get('AWS', 'tags').split(';'):
+            part = item.split(':', 1)
+            self.tags.append({"Key": part[0].strip(), "Value": part[1].strip()})
+            self.filters.append({"Name": 'tag:%s' % part[0].strip(), "Values": [part[1].strip()]})
+
         self.clients = []
         for region in self.config.get('AWS', 'regions').split(','):
             self.clients.append((region,
@@ -32,7 +39,7 @@ class AWS:
         for client_tuple in self.clients:
             region, client, _ = client_tuple
 
-            response = client.describe_addresses()
+            response = client.describe_addresses(Filters=self.filters)
             for address in response["Addresses"]:
                 ip = address["PublicIp"]
                 if "InstanceId" in address:
@@ -70,11 +77,14 @@ class AWS:
         for client_tuple in self.clients:
             region, client, _ = client_tuple
 
-            response = client.describe_instances()
+            response = client.describe_instances(Filters=self.filters)
             for reservation in response["Reservations"]:
                 for instance in reservation["Instances"]:
 
                     instance_name = "Unknown"
+                    if not 'Tags' in instance:
+                        continue
+
                     for tag in instance['Tags']:
                         if tag['Key'] == 'Name':
                             instance_name = tag['Value']
@@ -111,15 +121,19 @@ class AWS:
             region, client, _ = client_tuple
 
             print("Region: %s" % region)
-            response = client.describe_instances()
+            response = client.describe_instances(Filters=self.filters)
             for reservation in response["Reservations"]:
                 for instance in reservation["Instances"]:
                     #print(instance)
 
                     instance_name = "Unknown"
+                    if not 'Tags' in instance:
+                        continue
+
                     for tag in instance['Tags']:
                         if tag['Key'] == 'Name':
                             instance_name = tag['Value']
+                            
                     state = instance['State']['Name']
                     instance_id = instance['InstanceId']
                     public_ips = []
@@ -136,28 +150,13 @@ class AWS:
 
                     print("%s - %s (%s) [%s] (%s)%s" % (c, instance_id, instance_name, ", ".join(public_ips), state, Style.RESET_ALL))
 
-    def list_elastic_ips(self):
-        print("Elastic IPs")
-        for client_tuple in self.clients:
-            region, client, _ = client_tuple
-
-            print("Region: %s" % region)
-            response = client.describe_addresses()
-            for address in response["Addresses"]:
-                ip = address["PublicIp"]
-                if "InstanceId" in address:
-                    instance = address["InstanceId"]
-                else:
-                    instance = "Not associated"
-                print(" - %s => %s" % (ip, instance))
-
     def start_instance(self, instance_id):
         print("> Starting instance %s" % (instance_id,))
         found = False
         for client_tuple in self.clients:
             region, client, _ = client_tuple
 
-            response = client.describe_instances()
+            response = client.describe_instances(Filters=self.filters)
             for reservation in response["Reservations"]:
                 for instance in reservation["Instances"]:
                     if instance_id == instance['InstanceId']:
@@ -173,7 +172,7 @@ class AWS:
         for client_tuple in self.clients:
             region, client, _ = client_tuple
 
-            response = client.describe_instances()
+            response = client.describe_instances(Filters=self.filters)
             for reservation in response["Reservations"]:
                 for instance in reservation["Instances"]:
                     if instance_id == instance['InstanceId']:
@@ -183,6 +182,76 @@ class AWS:
         if not found:
             print("> Unable to stop instance, not found")
 
+    def list_elastic_ips(self):
+        print("Elastic IPs")
+        for client_tuple in self.clients:
+            region, client, _ = client_tuple
+
+            print("Region: %s" % region)
+            response = client.describe_addresses(Filters=self.filters)
+            for address in response["Addresses"]:
+                ip = address["PublicIp"]
+                if "InstanceId" in address:
+                    instance = address["InstanceId"]
+                else:
+                    instance = "Not associated"
+                print(" - %s => %s" % (ip, instance))
+
+
+    def new_ip(self, new_ip_region):
+        found = False
+        for client_tuple in self.clients:
+            region, client, _ = client_tuple
+
+            if new_ip_region != region:
+                continue
+
+            found = True
+
+            new_allocation = client.allocate_address(Domain='vpc', TagSpecifications=[
+                {
+                    "ResourceType": 'elastic-ip',
+                    "Tags": self.tags
+                }
+            ])
+            
+            print("New Elastic IP: %s" % new_allocation["PublicIp"])
+
+        if not found:
+            print("> Unable to get new elastic IP, region not found")
+
+    def remove_ip(self, ip):
+        found = False
+        for client_tuple in self.clients:
+            region, client, _ = client_tuple
+
+            response = client.describe_addresses(Filters=self.filters)
+            for address in response["Addresses"]:
+                elastic_ip = address["PublicIp"]
+                allocation_id = address["AllocationId"]
+                if not 'AssociationId' in address:
+                    association_id = None
+                else:
+                    association_id = address["AssociationId"]
+
+                if ip == elastic_ip:
+                    found = True
+
+                    if "InstanceId" in address:
+                        instance = address["InstanceId"]
+
+                        print("> Dissociating from instance %s" % instance)
+                        client.disassociate_address(AssociationId=association_id)
+                    else:
+                        instance = None
+
+                    print("> Releasing elastic IP")
+                    client.release_address(AllocationId=allocation_id)
+                else:
+                    continue
+
+        if not found:
+            print("> Unable to delete IP, not found")
 
 
     def renew_ip(self, ip):
@@ -191,13 +260,14 @@ class AWS:
         for client_tuple in self.clients:
             region, client, _ = client_tuple
 
-            response = client.describe_addresses()
+            response = client.describe_addresses(Filters=self.filters)
             for address in response["Addresses"]:
                 elastic_ip = address["PublicIp"]
                 allocation_id = address["AllocationId"]
                 if not 'AssociationId' in address:
-                    continue
-                association_id = address["AssociationId"]
+                    association_id = None
+                else:
+                    association_id = address["AssociationId"]
 
                 if ip == elastic_ip:
                     found = True
@@ -211,7 +281,12 @@ class AWS:
                         instance = None
 
                     print("> Getting new elastic IP")
-                    new_allocation = client.allocate_address(Domain='vpc')
+                    new_allocation = client.allocate_address(Domain='vpc', TagSpecifications=[
+                        {
+                            "ResourceType": 'elastic-ip',
+                            "Tags": self.tags
+                        }
+                    ])
 
                     print("> Releasing old elastic IP")
                     client.release_address(AllocationId=allocation_id)
@@ -234,7 +309,7 @@ class AWS:
         for client_tuple in self.clients:
             region, client, _ = client_tuple
 
-            response = client.describe_addresses()
+            response = client.describe_addresses(Filters=self.filters)
             for address in response["Addresses"]:
                 elastic_ip = address["PublicIp"]
                 allocation_id = address["AllocationId"]
@@ -259,12 +334,14 @@ class AWS:
         for client_tuple in self.clients:
             region, client, _ = client_tuple
 
-            response = client.describe_addresses()
+            response = client.describe_addresses(Filters=self.filters)
             for address in response["Addresses"]:
                 elastic_ip = address["PublicIp"]
                 allocation_id = address["AllocationId"]
-                print(address)
-                association_id = address["AssociationId"]
+                if not 'AssociationId' in address:
+                    association_id = None
+                else:
+                    association_id = address["AssociationId"]
 
                 if ip == elastic_ip:
                     found = True

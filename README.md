@@ -132,6 +132,7 @@ cd openvpn-install
 ```
 
   * Edit the /etc/openvpn/server.conf
+  * Add "client-to-client" to the configuration
   * Change "dev tun" to "dev tap"
   * Remove the following line : 'push "redirect-gateway def1 bypass-dhcp"'
 
