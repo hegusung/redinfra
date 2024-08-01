@@ -3,6 +3,10 @@
 regions = eu-west-3,eu-east-1,ap-northeast-1
 access_key_id = AWS_KEY
 secret_access_key = SECRET
+tags = Team: RedTeam;Owner: Exemple
+
+[CloudFlare]
+api = API_KEY
 
 [Routing]
 vpn_interface = tap0
