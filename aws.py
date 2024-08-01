@@ -5,9 +5,11 @@ import configparser
 from colorama import Fore, Style
 
 class AWS:
-    def __init__(self):
+    def __init__(self, cloudflare):
         self.config = configparser.ConfigParser(interpolation=None)
         self.config.read(os.path.join(os.path.dirname(sys.argv[0]), 'redinfra.cfg'))
+
+        self.cloudflare = cloudflare
 
         self.tags = []
         self.filters = []
@@ -47,6 +49,26 @@ class AWS:
 
         # List domains
         linked_ips = []
+        domains = self.cloudflare.get_dns()
+
+        for dns, dns_info in domains.items():
+            dns_type = dns_info['type']
+
+            if not dns_type in ['A', 'AAAA']:
+                continue
+
+            if dns_info['proxied']:
+                dns = "(Cloudflare) %s" % dns
+
+            ip = dns_info['content']
+
+            if ip in elastic_ips:
+                config.append([dns, ip, elastic_ips[ip]])
+                linked_ips.append(ip)
+            else:
+                config.append([dns, ip, None])
+
+        """
         client_tuple = self.clients[0] # Only use the first one
         region, _, client = client_tuple
 
@@ -72,6 +94,7 @@ class AWS:
                         linked_ips.append(ip)
                     else:
                         config.append([dns, ip, None])
+        """
 
         instance_dict = {}
         for client_tuple in self.clients:

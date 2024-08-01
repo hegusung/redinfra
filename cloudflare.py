@@ -38,6 +38,27 @@ class CloudFlare:
         return r.json()
 
 
+    def get_dns(self):
+        output = {}
+
+        json = self.query("/zones")
+
+        for i in json["result"]:
+            zone = i["name"]
+            zone_id = i['id']
+
+            dns_json = self.query("/zones/%s/dns_records" % zone_id)
+
+            for dns_info in dns_json["result"]:
+
+                output[dns_info['name']] = {
+                    'type': dns_info['type'],
+                    'content': dns_info['content'],
+                    'proxied': dns_info['proxied']
+                }
+
+        return output
+
 
     def list_dns(self):
         print("DNS entries")

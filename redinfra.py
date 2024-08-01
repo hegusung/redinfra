@@ -44,8 +44,8 @@ def main():
 
     args = parser.parse_args()
 
-    aws = AWS()
     cloudflare = CloudFlare()
+    aws = AWS(cloudflare)
 
     if args.list_aws:
         aws.list_aws()
