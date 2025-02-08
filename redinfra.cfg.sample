@@ -8,6 +8,9 @@ tags = Team: RedTeam;Owner: Exemple
 [CloudFlare]
 api = API_KEY
 
+[SendGrid]
+api = API_KEY
+
 [Routing]
 vpn_interface = tap0
 iptables_chain = redinfra

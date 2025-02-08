@@ -3,6 +3,7 @@ import argparse
 
 from aws import AWS
 from cloudflare import CloudFlare
+from sendgridclient import SendGrid
 from routing import Routing
 from colorama import Fore, Style
 
@@ -29,6 +30,14 @@ def main():
     cf_group.add_argument('--new-proxy', nargs=2, metavar=("DNS", "Value"), type=str, help='Register new proxied DNS', dest='new_proxy')
     cf_group.add_argument('--remove-dns', nargs=2, metavar=("DNS", "Value"), type=str, help='Remove DNS entry', dest='remove_dns')
     cf_group.add_argument('--dns-type', default='A', type=str, help='DNS entry type', dest='dns_type')
+    
+    sg_group = parser.add_argument_group("SendGrid")
+    sg_group.add_argument('--new-mail-domain', metavar="domain", type=str, help='Add a new domain to sendgrib, DNS entries will be created', dest='sendgrid_new_domain')
+    sg_group.add_argument('--delete-mail-domain', metavar="domain", type=str, help='Delete a domain from sendgrib, DNS entries will be deleted', dest='sendgrid_delete_domain')
+    sg_group.add_argument('--list-mail-domain', action='store_true', help='List domains from SendGrib', dest='sendgrid_list_domain')
+    sg_group.add_argument('--list-senders', action='store_true', help='List senders from SendGrib', dest='sendgrid_list_senders')
+    sg_group.add_argument('--new-sender', nargs=2, metavar=("Name", "email"), type=str, help='Add a new sender to sendgrib', dest='sendgrid_new_sender')
+    sg_group.add_argument('--delete-sender', metavar="email", type=str, help='Delete a sender from sendgrib', dest='sendgrid_delete_sender')
 
     routing_group = parser.add_argument_group("Routing")
     routing_group.add_argument('--set-routing', nargs=3, metavar=("Instance", "IP", "Ports"), type=str, help='Set a route between an Instance and an IP', dest='set_routing')
@@ -85,6 +94,26 @@ def main():
 
     if args.remove_dns:
         cloudflare.remove_dns(args.remove_dns[0], args.remove_dns[1], args.dns_type)
+
+    sendgrid = SendGrid(cloudflare)
+
+    if args.sendgrid_new_domain:
+        sendgrid.new_domain(args.sendgrid_new_domain)
+
+    if args.sendgrid_delete_domain:
+        sendgrid.delete_domain(args.sendgrid_delete_domain)
+
+    if args.sendgrid_list_domain:
+        sendgrid.list_domains()
+
+    if args.sendgrid_list_senders:
+        sendgrid.list_senders()
+
+    if args.sendgrid_new_sender:
+        sendgrid.new_sender(args.sendgrid_new_sender[0], args.sendgrid_new_sender[1])
+
+    if args.sendgrid_delete_sender:
+        sendgrid.delete_sender(args.sendgrid_delete_sender)
 
     routing = Routing()
 

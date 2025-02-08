@@ -81,7 +81,7 @@ class CloudFlare:
 
   
     def new_dns(self, domain, value, dns_type='A', proxied=False):
-        print("Setting new domain %s = %s => %s (proxied: %s)" % (domain, dns_type, value, proxied))
+        print("[+] Setting new domain %s = %s => %s (proxied: %s)" % (domain, dns_type, value, proxied))
 
         json = self.query("/zones")
 
@@ -104,15 +104,16 @@ class CloudFlare:
                 dns_json = self.query("/zones/%s/dns_records" % zone_id, post=data)
 
                 if dns_json['success'] == True:
-                    print("Success !")
+                    print("[+] Success !")
                 else:
-                    print("Fail: %s" % dns_json['errors'][0]['message'])
+                    print("[-] Fail: %s" % dns_json['errors'][0]['message'])
+                    return 1
 
-
+        return 0
 
 
     def remove_dns(self, domain, value, dns_type='A'):
-        print("Removing dns entry %s = %s => %s" % (domain, dns_type, value))
+        print("[+] Removing dns entry %s = %s => %s" % (domain, dns_type, value))
 
         json = self.query("/zones")
 
@@ -132,14 +133,16 @@ class CloudFlare:
 
                         if delete_json['success'] == True:
                             found = True
-                            print("Success !")
+                            print("[+] Success !")
+                            return 0
                         else:
-                            print("Fail: %s" % delete_json['errors'][0]['message'])
-
-                        return
-
+                            print("[-] Fail: %s" % delete_json['errors'][0]['message'])
+                            return 1
+            
         if not found:
             print("Unable to find DNS")
+
+            return 2
 
 
 
