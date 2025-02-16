@@ -1,0 +1,10 @@
+- name: Ensure iptables is installed
+  package:
+    name: iptables
+    state: present
+
+- name: Ensure openvpn is installed
+  package:
+    name: openvpn
+    state: present
+

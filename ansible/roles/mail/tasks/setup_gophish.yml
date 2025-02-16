@@ -1,0 +1,166 @@
+- name: Update package cache
+  apt:
+    update_cache: yes
+
+- name: Install go and git
+  apt:
+    name: 
+      - golang-go
+      - git
+    state: present
+
+# Stop services if existing
+
+- name: Stop gophish service if present
+  service:
+    name: gophish
+    state: stopped
+  ignore_errors: yes
+
+# Install gophish
+
+- name: Create /opt/gophish directory
+  file:
+    path: "/opt/gophish"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Clone Gophish repository
+  git:
+    repo: "https://github.com/gophish/gophish.git"
+    dest: "/opt/gophish"
+    version: "master"
+    force: yes
+
+- name: Run `go mod download` inside the Gophish directory
+  command: go mod download
+  args:
+    chdir: "/opt/gophish"
+
+# Config files
+
+- name: Generate /opt/gophish/config.json
+  template:
+    src: templates/config.json.j2
+    dest: /opt/gophish/config.json
+    owner: root
+    group: root
+    mode: '0644'
+
+# Make gophish more silent
+
+- name: Change headers in webhook dir
+  shell: "sed -i 's/X-Gophish-/X-/' webhook/*.go"
+  args:
+    chdir: "/opt/gophish"
+
+- name: Change headers in models dir
+  shell: "sed -i 's/X-Gophish-/X-/' models/*.go"
+  args:
+    chdir: "/opt/gophish"
+
+- name: Change server name
+  shell: "sed -i 's/const ServerName = \"gophish\"/const ServerName = \"IGNORE\"/' config/config.go"
+  args:
+    chdir: "/opt/gophish"
+
+- name: Change parameter name
+  shell: "sed -i 's/const RecipientParameter = \"rid\"/const RecipientParameter = \"{{ gophish_rid }}\"/g' models/campaign.go"
+  args:
+    chdir: "/opt/gophish"
+
+- name: Change track uri
+  shell: "sed -i 's@/track@{{ gophish_track_uri }}@g' controllers/phish.go"
+  args:
+    chdir: "/opt/gophish"
+
+- name: Change track uri
+  shell: "sed -i 's@trackingURL.Path = path.Join(trackingURL.Path, \"/track\")@trackingURL.Path = path.Join(trackingURL.Path, \"{{ gophish_track_uri }}\")@g' models/template_context.go"
+  args:
+    chdir: "/opt/gophish"
+
+# Compile
+
+- name: Run `go build` inside the Gophish directory
+  command: go build
+  args:
+    chdir: "/opt/gophish"
+
+# Setup gophish service
+
+- name: Generate /etc/systemd/system/gophish.service
+  template:
+    src: templates/gophish.service.j2
+    dest: /etc/systemd/system/gophish.service
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Start and enable gophish service
+  service:
+    name: gophish
+    state: started
+    enabled: yes 
+
+# Add sending profiles
+
+- name: Create the python files
+  copy:
+    src: templates/add_sending_profile.py
+    dest: /opt/gophish/add_sending_profile.py
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Add sending profiles
+  shell: "python3 add_sending_profile.py {{ item }}"
+  args:
+    chdir: "/opt/gophish"
+  loop: "{{ mails }}"
+
+# Installing Apache front
+
+- name: Install apache
+  apt:
+    name: 
+      - apache2
+    state: present
+
+# Stop services if existing
+
+- name: Stop apache service if present
+  service:
+    name: apache2
+    state: stopped
+  ignore_errors: yes
+
+- name: Enable apache mods
+  shell: a2enmod proxy proxy_http ssl rewrite headers
+
+- name: Generate apache config files
+  template:
+    src: templates/apache.conf.j2
+    dest: /etc/apache2/sites-available/{{ item }}.conf
+    owner: root
+    group: root
+    mode: '0644'
+  loop: "{{ web_domains }}"
+
+- name: Enable apache site
+  shell: a2ensite {{ item }}.conf
+  loop: "{{ web_domains }}"
+
+- name: Create dir
+  shell: mkdir /var/www/{{ item }}
+  loop: "{{ web_domains }}"
+  ignore_errors: yes
+
+- name: Start and enable apache2 service
+  service:
+    name: apache2
+    state: started
+    enabled: yes 
+
+

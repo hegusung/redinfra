@@ -1,0 +1,52 @@
+---
+- name: Generate the certificate
+  hosts: vpn
+  gather_facts: no
+  become: yes
+  tasks:
+    - name: Wait for the EC2 instance to be accessible via SSH
+      wait_for:
+        host: "{{ inventory_hostname }}"
+        port: 22  # Port for SSH
+        state: started
+        delay: 10  # Initial delay before starting to check
+        timeout: 300  # Maximum time to wait (5 minutes)
+        sleep: 10  # Time between retries
+      delegate_to: localhost
+
+    - name: Generate node certificate
+      include_role:
+        name: redinfra_vpn
+        tasks_from: generate_certificate.yml
+
+- name: Install the node
+  hosts: node
+  gather_facts: no
+  become: yes
+  tasks:
+    - name: Wait for the EC2 instance to be accessible via SSH
+      wait_for:
+        host: "{{ inventory_hostname }}"
+        port: 22  # Port for SSH
+        state: started
+        delay: 10  # Initial delay before starting to check
+        timeout: 300  # Maximum time to wait (5 minutes)
+        sleep: 10  # Time between retries
+      delegate_to: localhost
+
+    - name: Install and configure the Node VPN
+      include_role:
+        name: node 
+        tasks_from: setup_vpn.yml
+
+    - name: Register the Node
+      include_role:
+        name: router
+        tasks_from: install_new_node.yml
+        apply:
+          delegate_to: localhost
+
+    - name: Install and configure the Node Firewall
+      include_role:
+        name: node 
+        tasks_from: setup_firewall.yml

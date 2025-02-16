@@ -1,0 +1,49 @@
+- name: Install required packages
+  apt:
+    name:
+      - git
+      - python3
+      - python3-pip
+    state: present
+    update_cache: yes
+
+- name: Stop responder service if present
+  service:
+    name: responder
+    state: stopped
+  ignore_errors: yes
+
+- name: Clone Responder repository
+  git:
+    repo: "https://github.com/lgandx/Responder.git"
+    dest: "/opt/Responder"
+    version: master
+    force: yes
+
+- name: Create a systemd service file for Responder
+  copy:
+    dest: "/etc/systemd/system/responder.service"
+    content: |
+      [Unit]
+      Description=Responder Service
+      After=network.target
+
+      [Service]
+      Type=simple
+      ExecStart=/usr/bin/python3 /opt/Responder/Responder.py -I enp0s3 -wF
+      Restart=always
+      User=root
+      WorkingDirectory=/opt/Responder
+
+      [Install]
+      WantedBy=multi-user.target
+
+- name: Reload systemd daemon
+  systemd:
+    daemon_reload: yes
+
+- name: Start and enable responder service
+  service:
+    name: responder
+    state: started
+    enabled: yes 

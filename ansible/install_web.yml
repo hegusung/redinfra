@@ -1,0 +1,10 @@
+---
+- name: Install a Web server
+  hosts: host
+  gather_facts: no
+  become: yes
+  tasks:
+    - name: Install and configure apache
+      include_role:
+        name: web
+        tasks_from: setup_apache.yml

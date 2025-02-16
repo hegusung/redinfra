@@ -1,0 +1,6 @@
+- name: Uninstall node from redinfra
+  ansible.builtin.shell:
+    cmd: python3 redinfra.py local --remove-vpn-ip {{ node_id }}
+  args:
+    chdir: ..
+

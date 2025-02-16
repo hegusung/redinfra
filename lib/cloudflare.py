@@ -4,11 +4,14 @@ import requests
 import configparser
 
 class CloudFlare:
-    def __init__(self):
-        self.config = configparser.ConfigParser(interpolation=None)
-        self.config.read(os.path.join(os.path.dirname(sys.argv[0]), 'redinfra.cfg'))
+    def __init__(self, config):
+        self.config = config
 
-        self.api_key = self.config.get('CloudFlare', 'api')
+        #self.config = configparser.ConfigParser(interpolation=None)
+        #self.config.read(os.path.join(os.path.dirname(sys.argv[0]), 'redinfra.cfg'))
+
+        #self.api_key = self.config.get('CloudFlare', 'api')
+        self.api_key = self.config.get_api_key('cloudflare_key') 
 
     def query(self, uri, post=None):
         headers = {
@@ -24,6 +27,33 @@ class CloudFlare:
             r = requests.post(url, headers=headers, json=post)
 
         return r.json()
+
+    def set_encryption_mode(self, mode="full"): 
+        headers = {
+            'Authorization':  "Bearer %s" % self.api_key,
+            'Content-Type':  'application/json'
+        }
+
+        json = self.query("/zones")
+
+        for i in json["result"]:
+            zone = i["name"]
+            zone_id = i['id']
+        
+            url = 'https://api.cloudflare.com/client/v4/zones/%s/settings/ssl' % zone_id
+
+            # Payload to change SSL mode
+            data = {
+                "value": mode
+            }
+
+            response = requests.patch(url, headers=headers, json=data)
+
+            # Check response
+            if response.status_code == 200:
+                print("[+] SSL mode updated successfully for zone %s:" % zone, response.json()["result"]["value"])
+            else:
+                print("[-] Failed to update SSL mode for zone %s:" % zone, response.json())
 
     def delete(self, uri):
         headers = {

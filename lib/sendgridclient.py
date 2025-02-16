@@ -7,15 +7,31 @@ import configparser
 
 class SendGrid:
 
-    def __init__(self, cloudflare):
+    def __init__(self, config, cloudflare):
         self.cloudflare = cloudflare
+        self.config = config
 
-        self.config = configparser.ConfigParser(interpolation=None)
-        self.config.read(os.path.join(os.path.dirname(sys.argv[0]), 'redinfra.cfg'))
+        #self.config = configparser.ConfigParser(interpolation=None)
+        #self.config.read(os.path.join(os.path.dirname(sys.argv[0]), 'redinfra.cfg'))
 
-        self.api_key = self.config.get('SendGrid', 'api')
+        #self.api_key = self.config.get('SendGrid', 'api')
+        self.api_key = self.config.get_api_key('sendgrid_api')
 
         self.sg = sendgrid.SendGridAPIClient(api_key=self.api_key)
+
+    def disable_clicktracking(self):
+        # Disable Click Tracking globally
+        data = {"enabled": False}
+
+        try:
+            response = self.sg.client.tracking_settings.click.patch(request_body=data)
+            print("[+] Click tracking has been disabled globally.")
+
+            return 0
+        except HTTPError as e:
+            print("[-] Failed to update settings:", e)
+
+            return 1
 
     def new_domain(self, domain):
         print("[+] Registring the domain %s in SendGrid" % domain)
@@ -94,6 +110,44 @@ class SendGrid:
 
         return 0
 
+    def get_config(self):
+        email_config = {}
+
+        params = {
+            'exclude_subusers': 'true'
+        }
+        response = self.sg.client.whitelabel.domains.get(query_params=params)
+        response_json = json.loads(response.body)
+
+        for dom_info in response_json:
+            email_config[dom_info['domain']] = {
+                "email": {},
+                "dns": [],
+            }
+
+            for key, dns_info in dom_info['dns'].items():
+                email_config[dom_info['domain']]['dns'].append({
+                    'type': dns_info['type'],
+                    'key': dns_info['host'],
+                    'value': dns_info['data']
+                })
+            email_config[dom_info['domain']]['dns'].append({
+                'type': 'TXT',
+                'key': "_dmarc.%s" % dom_info['domain'],
+                'value': "\"v=DMARC1; p=none;\""
+            })
+
+        response = self.sg.client.senders.get()
+        response_json = json.loads(response.body)
+
+        for sender_info in response_json:
+            domain = sender_info['from']['email'].split('@')[-1]
+            email_config[domain]['email'][sender_info['from']['email']] = sender_info['from']['name']
+
+        return email_config
+
+
+
     def list_domains(self):
         print("[+] Domains:")
 
@@ -104,7 +158,7 @@ class SendGrid:
         response_json = json.loads(response.body)
 
         for dom_info in response_json:
-            print(" > %s" % dom_info['domain'])
+            print(" > %s (valid: %s)" % (dom_info['domain'], dom_info['valid']))
 
         return 0
 
@@ -192,7 +246,7 @@ class SendGrid:
         response_json = json.loads(response.body)
 
         for sender_info in response_json:
-            print(" > %s <%s>" % (sender_info['from']['name'], sender_info['from']['email']))
+            print(" > %s <%s> (verified: %s)" % (sender_info['from']['name'], sender_info['from']['email'], sender_info['verified']['status']))
 
         return 0
 

@@ -1,0 +1,46 @@
+- name: Stop OpenVPN service if present
+  service:
+    name: openvpn@client  # Ensure the service matches your OpenVPN setup (e.g., openvpn@<config_name>)
+    state: stopped
+  ignore_errors: yes
+
+- name: Upload OpenVPN configuration file
+  copy:
+    src: files/{{ certificate_name }}.ovpn  # Path to the file on the control node
+    dest: /etc/openvpn/client.conf  # Path to the destination on the remote node
+    mode: '0644'
+
+- name: Start and enable OpenVPN service
+  service:
+    name: openvpn@client  # Ensure the service matches your OpenVPN setup (e.g., openvpn@<config_name>)
+    state: started
+    enabled: yes 
+
+- name: Pause for 10 seconds to bring the VPN up
+  ansible.builtin.pause:
+    seconds: 10
+
+- name: Check OpenVPN connection
+  shell: ip addr show tap0
+  register: openvpn_ip_info
+  failed_when: "'tap0' not in openvpn_ip_info.stdout"
+
+- name: Parse OpenVPN-assigned IP
+  set_fact:
+    openvpn_ip: "{{ openvpn_ip_info.stdout | regex_search('inet ([0-9.]+)/', '\\1') }}"
+
+- name: Display OpenVPN IP address
+  debug:
+    msg: "The OpenVPN-assigned IP address is {{ openvpn_ip }}"
+
+- name: Clearing old config
+  ansible.builtin.shell:
+    cmd: python3 redinfra.py local --clear-config
+  args:
+    chdir: ..
+
+- name: Register new node to redinfra
+  ansible.builtin.shell:
+    cmd: python3 redinfra.py local --set-vpn-ip router {{ openvpn_ip[0] }}
+  args:
+    chdir: ..

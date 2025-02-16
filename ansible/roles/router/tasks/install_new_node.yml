@@ -1,0 +1,33 @@
+- name: Display Elastic IP address
+  debug:
+    msg: "The Elastic IP address is {{ inventory_hostname }}"
+
+- name: Hostvars
+  debug:
+    msg: "The Node ID is {{ node_id }}"
+
+- name: Register new node to redinfra
+  ansible.builtin.shell:
+    cmd: python3 redinfra.py local --set-vpn-ip {{ node_id }} {{ hostvars[inventory_hostname]['node_ovpn_ip'] }}
+  args:
+    chdir: ..
+  register: redinfra_register_output
+
+- name: Display command output
+  debug:
+    msg: "RedInfra output: {{ redinfra_register_output }}"
+
+- name: Extract the last IP using regex_search
+  set_fact:
+    extracted_ip: "{{ redinfra_register_output['stdout'] | regex_search('Corresponding router ip: ([0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+)', '\\1') }}"
+
+- name: Get the OpenVPN router IP
+  shell: ip addr show tap0
+  register: openvpn_ip_info
+  failed_when: "'tap0' not in openvpn_ip_info.stdout"
+
+- name: Save the OpenVPN-assigned IP
+  set_fact:
+    router_vpn_ip: "{{ openvpn_ip_info.stdout | regex_search('inet ([0-9.]+)/', '\\1') }}"
+
+

@@ -9,11 +9,14 @@ ROUTING_CONFIG_FILE = "routing.cfg"
 
 class Routing():
 
-    def __init__(self):
-        self.config = configparser.ConfigParser()
+    def __init__(self, config):
+        #self.config = configparser.ConfigParser()
+        self.config = config
         self.routing_config = configparser.ConfigParser()
 
-        self.config.read(CONFIG_FILE)
+        self.reload_config()
+
+    def reload_config(self):
         self.routing_config.read(ROUTING_CONFIG_FILE)
 
         if not 'VPN' in self.routing_config.sections():
@@ -27,6 +30,8 @@ class Routing():
 
             with open(ROUTING_CONFIG_FILE, "w") as configfile:
                 self.routing_config.write(configfile)
+
+
 
     def show_config(self, config):
         for c in config:
@@ -48,16 +53,19 @@ class Routing():
         return config
 
     def set_vpn_ip(self, instance, ip):
-        # Create a specific IP for the AWS 192.168.56.2 -> 192.168.56.102
-        ip_parts = ip.split('.')
-        if int(ip_parts[-1]) >= 100:
-            raise Exception("AWS VPN ip should be between 1 and 99")
-        ip_parts[-1] = str(int(ip_parts[-1]) + 100)
-        ip_router = ".".join(ip_parts)
+        if instance  == 'router':
+            self.routing_config['VPN'][instance] = ip
+        else:
+            # Create a specific IP for the AWS 192.168.56.2 -> 192.168.56.102
+            ip_parts = ip.split('.')
+            if int(ip_parts[-1]) >= 100:
+                raise Exception("AWS VPN ip should be between 1 and 99")
+            ip_parts[-1] = str(int(ip_parts[-1]) + 100)
+            ip_router = ".".join(ip_parts)
 
-        print("[+] Instance ip: %s, Corresponding router ip: %s" % (ip, ip_router))
+            print("[+] Instance ip: %s, Corresponding router ip: %s" % (ip, ip_router))
 
-        self.routing_config['VPN'][instance] = "%s:%s" % (ip, ip_router)
+            self.routing_config['VPN'][instance] = "%s:%s" % (ip, ip_router)
 
         with open(ROUTING_CONFIG_FILE, "w") as configfile:
             self.routing_config.write(configfile)
@@ -79,6 +87,15 @@ class Routing():
             self.routing_config.write(configfile)
 
 
+    def _get_config_instance_ids(self):
+        ids_list = []
+
+        for id in self.routing_config['VPN']:
+            if id != 'router':
+                ids_list.append(id)
+
+        return ids_list
+
     def set_routing(self, instance, ip, ports):
         self.routing_config['Routing'][instance] = "%s:%s" % (ip, ports)
 
@@ -86,9 +103,20 @@ class Routing():
             self.routing_config.write(configfile)
 
     def list_routing(self):
-        print("Routing:")
+        print("[+] Routing:")
         for instance, ip in self.routing_config['Routing'].items():
-            print(" - %s : %s" % (instance, ip))
+            print("   - %s : %s" % (instance, ip))
+
+    def clear_config(self):
+        print("[+] Clearing config")
+        os.remove(ROUTING_CONFIG_FILE)
+
+    def clear_routing(self):
+        print("[+] Clearing routing")
+        self.routing_config['Routing'] = {}
+
+        with open(ROUTING_CONFIG_FILE, "w") as configfile:
+            self.routing_config.write(configfile)
 
     def remove_routing(self, instance):
         try:
@@ -103,11 +131,12 @@ class Routing():
         print("[+] Enabling ip_forward")
         os.system("echo 1 >/proc/sys/net/ipv4/ip_forward")
 
-        vpn_interface = self.config['Routing']['vpn_interface']
-        redinfra_chain = self.config['Routing']['iptables_chain']
-        vpn_range = self.config['Routing']['vpn_range']
-        redirector_vpn_ip = self.config['Routing']['redirector_vpn_ip']
-        rule_priority = int(self.config['Routing']['rule_priority'])
+        vpn_interface = self.config.get_routing_config()['vpn_interface']
+        redinfra_chain = self.config.get_routing_config()['iptables_chain']
+        vpn_range = self.config.get_routing_config()['vpn_range']
+        #redirector_vpn_ip = self.config.get_routing()['redirector_vpn_ip']
+        redirector_vpn_ip = self.routing_config['VPN']['router']
+        rule_priority = int(self.config.get_routing_config()['rule_priority'])
 
         # flush
         IPTablesManager.flush_rules(redinfra_chain, rule_priority)
@@ -124,8 +153,9 @@ class Routing():
 
         # Create AWS to local node
         # use table_id as the marking value
-        table_id = int(self.config['Routing']['rule_start_table'])
+        table_id = int(self.config.get_routing_config()['rule_start_table'])
         for aws_instance, local_ip_ports in self.routing_config['Routing'].items():
+            print(self.routing_config['VPN'])
             aws_vpn_ip = self.routing_config['VPN'][aws_instance].split(':')[0]
             corresponding_vpn_ip = self.routing_config['VPN'][aws_instance].split(':')[-1]
             local_ip = local_ip_ports.split(':')[0]
@@ -179,7 +209,7 @@ class Routing():
         ipdb = IPDB()
         ndb = NDB()
 
-        table_id = int(self.config['Routing']['rule_start_table'])
+        table_id = int(self.config.get_routing_config()['rule_start_table'])
         for aws_instance, local_ip in self.routing_config['Routing'].items():
             #print("==================")
             #print(aws_instance)
@@ -190,17 +220,17 @@ class Routing():
 
             spec = {'src': '%s/32' % local_ip,
                     'table': table_id,
-                    'priority': int(self.config['Routing']['rule_priority']),
+                    'priority': int(self.config.get_routing_config()['rule_priority']),
                     }
             print("[+] Creating rule from %s to table %d" % (local_ip, table_id))
             try:
                 # fwmark same as table id
-                ndb.rules.create(src='%s/32' % local_ip, fwmark=table_id, table=table_id, priority=int(self.config['Routing']['rule_priority'])-1).commit()
+                ndb.rules.create(src='%s/32' % local_ip, fwmark=table_id, table=table_id, priority=int(self.config.get_routing_config()['rule_priority'])-1).commit()
             except Exception as e:
                 # Exception raised but it works....
                 pass
             try:
-                ndb.rules.create(src='%s/32' % local_ip, table=table_id, priority=int(self.config['Routing']['rule_priority'])).commit()
+                ndb.rules.create(src='%s/32' % local_ip, table=table_id, priority=int(self.config.get_routing_config()['rule_priority'])).commit()
             except Exception as e:
                 # Exception raised but it works....
                 pass

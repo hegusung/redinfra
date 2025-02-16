@@ -1,0 +1,187 @@
+- name: Update package cache
+  apt:
+    update_cache: yes
+
+- name: Install dependencies
+  apt:
+    name: 
+      - postfix
+      - libsasl2-modules
+      - dovecot-core
+      - dovecot-imapd
+      - dovecot-lmtpd
+      - openssl
+    state: present
+
+# Stop services if existing
+
+- name: Stop postfix service if present
+  service:
+    name: postfix
+    state: stopped
+  ignore_errors: yes
+
+- name: Stop dovecot service if present
+  service:
+    name: dovecot
+    state: stopped
+  ignore_errors: yes
+
+# Prepare use and directories
+
+- name: Ensure mail spool directories exist
+  file:
+    path: "/var/spool/mail/{{ item.domain }}"
+    state: directory
+    mode: '0755'
+  loop: "{{ domains }}"
+
+- name: Add vmail user
+  user:
+    name: vmail
+    state: present
+  ignore_errors: yes
+
+- name: Set ownership of mail spool directories
+  file:
+    path: "/var/spool/mail/"
+    state: directory
+    owner: vmail
+    group: vmail
+    recurse: yes
+
+- name: Remove the shadow if it exists
+  ansible.builtin.file:
+    path: "/var/spool/mail/{{ item.domain }}/shadow"
+    state: absent
+  loop: "{{ domains }}"
+
+- name: Generate accounts
+  shell: "echo \"{{ item.1.mail }}@{{ item.0.domain }}:$(doveadm pw -u {{ item.1.mail }}@{{ item.0.domain }} -p '{{ item.1.password }}')\" >> /var/spool/mail/{{ item.0.domain }}/shadow"
+  with_subelements:
+    - "{{ domains | list }}"
+    - users
+
+# Generate certificates
+
+- name: Generate SSL certificates
+  command:
+    cmd: openssl req -x509 -newkey rsa:4096 -keyout /etc/ssl/private/mailserver.key -out /etc/ssl/certs/mailserver.crt -days 365 -nodes -subj "/CN=mail"
+    creates: /etc/ssl/certs/mailserver.crt
+
+# Create config files
+
+- name: Generate /etc/postfix/main.cf
+  template:
+    src: templates/main.cf.j2
+    dest: /etc/postfix/main.cf
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Generate /etc/postfix/master.cf
+  template:
+    src: templates/master.cf.j2
+    dest: /etc/postfix/master.cf
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Generate /etc/postfix/sasl_passwd
+  template:
+    src: templates/sasl_passwd.j2
+    dest: /etc/postfix/sasl_passwd
+    owner: root
+    group: root
+    mode: '0600'
+
+- name: Generate /etc/postfix/virtual_domains
+  template:
+    src: templates/virtual_domains.j2
+    dest: /etc/postfix/virtual_domains
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Generate /etc/postfix/virtual_mailbox
+  template:
+    src: templates/virtual_mailbox.j2
+    dest: /etc/postfix/virtual_mailbox
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Generate /etc/postfix/mynetworks
+  copy:
+    dest: /etc/postfix/mynetworks
+    content: "127.0.0.1/32\n172.17.0.0/16"
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Postmap sasl_passwd
+  ansible.builtin.shell:
+    cmd: postmap /etc/postfix/sasl_passwd 
+
+- name: Postmap virtual_domains
+  ansible.builtin.shell:
+    cmd: postmap /etc/postfix/virtual_domains
+
+- name: Postmap virtual_mailbox
+  ansible.builtin.shell:
+    cmd: postmap /etc/postfix/virtual_mailbox
+
+# Dovecot
+
+- name: Configure Dovecot
+  template:
+    src: dovecot.conf.j2
+    dest: /etc/dovecot/dovecot.conf
+
+- name: Start and enable postfix service
+  service:
+    name: postfix
+    state: started
+    enabled: yes 
+
+- name: Start and enable postfix service
+  service:
+    name: dovecot
+    state: started
+    enabled: yes 
+
+# Roundcube (docker)
+
+- name: Install docker
+  apt:
+    name: 
+      - docker.io
+    state: present
+
+- name: Pull Roundcube Docker image
+  community.docker.docker_image:
+    name: roundcube/roundcubemail
+    source: pull
+
+- name: Stop all running Docker containers
+  shell: "docker stop $(docker ps -q) 2>&1 >/dev/null"
+  ignore_errors: yes
+
+- name: Remove all Docker containers
+  shell: "docker rm $(docker ps -aq) 2>&1 >/dev/null"
+  ignore_errors: yes
+
+
+- name: Run Roundcube container with environment variables
+  community.docker.docker_container:
+    name: roundcube
+    image: roundcube/roundcubemail
+    state: started
+    restart_policy: always
+    ports:
+      - "8000:80"
+    env:
+      ROUNDCUBEMAIL_DEFAULT_HOST: "172.17.0.1"
+      ROUNDCUBEMAIL_SMTP_SERVER: "172.17.0.1"
+      ROUNDCUBEMAIL_SMTP_PORT: "25"
+    detach: yes

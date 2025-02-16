@@ -5,31 +5,32 @@ import configparser
 from colorama import Fore, Style
 
 class AWS:
-    def __init__(self, cloudflare):
-        self.config = configparser.ConfigParser(interpolation=None)
-        self.config.read(os.path.join(os.path.dirname(sys.argv[0]), 'redinfra.cfg'))
+    def __init__(self, config, cloudflare):
+        self.config = config
+
+        #self.config = configparser.ConfigParser(interpolation=None)
+        #self.config.read(os.path.join(os.path.dirname(sys.argv[0]), 'redinfra.cfg'))
 
         self.cloudflare = cloudflare
 
         self.tags = []
         self.filters = []
-        for item in self.config.get('AWS', 'tags').split(';'):
-            part = item.split(':', 1)
-            self.tags.append({"Key": part[0].strip(), "Value": part[1].strip()})
-            self.filters.append({"Name": 'tag:%s' % part[0].strip(), "Values": [part[1].strip()]})
+        for key, value in self.config.get_tags().items():
+            self.tags.append({"Key": key, "Value": value})
+            self.filters.append({"Name": 'tag:%s' % key, "Values": [value]})
 
         self.clients = []
-        for region in self.config.get('AWS', 'regions').split(','):
+        for region in self.config.get_cloud_regions():
             self.clients.append((region,
                 boto3.client('ec2',
                     region_name=region,
-                    aws_access_key_id=self.config.get('AWS', 'access_key_id'),
-                    aws_secret_access_key=self.config.get('AWS', 'secret_access_key')
+                    aws_access_key_id=self.config.get_api_key('aws_key'),
+                    aws_secret_access_key=self.config.get_api_key('aws_secret')
                 ),
                 boto3.client('route53',
                     region_name=region,
-                    aws_access_key_id=self.config.get('AWS', 'access_key_id'),
-                    aws_secret_access_key=self.config.get('AWS', 'secret_access_key')
+                    aws_access_key_id=self.config.get_api_key('aws_key'),
+                    aws_secret_access_key=self.config.get_api_key('aws_secret')
                 ),
                 ))
 
@@ -172,6 +173,38 @@ class AWS:
                         c = Fore.RED
 
                     print("%s - %s (%s) [%s] (%s)%s" % (c, instance_id, instance_name, ", ".join(public_ips), state, Style.RESET_ALL))
+
+    def _list_aws(self):
+        ec2_list = []
+
+        for client_tuple in self.clients:
+            region, client, _ = client_tuple
+
+            response = client.describe_instances(Filters=self.filters)
+            for reservation in response["Reservations"]:
+                for instance in reservation["Instances"]:
+                    #print(instance)
+
+                    instance_name = "Unknown"
+                    if not 'Tags' in instance:
+                        continue
+
+                    for tag in instance['Tags']:
+                        if tag['Key'] == 'Name':
+                            instance_name = tag['Value']
+                            
+                    state = instance['State']['Name']
+                    instance_id = instance['InstanceId']
+                    public_ips = []
+
+                    for association in instance["NetworkInterfaces"]:
+                        if "Association" in association:
+                            public_ips.append(association["Association"]["PublicIp"])
+
+                    ec2_list.append((instance_id, instance_name, state, public_ips))
+
+        return ec2_list
+
 
     def start_instance(self, instance_id):
         print("> Starting instance %s" % (instance_id,))

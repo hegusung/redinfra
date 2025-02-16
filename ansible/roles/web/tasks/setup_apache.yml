@@ -1,0 +1,41 @@
+- name: Install apache
+  apt:
+    name: 
+      - apache2
+    state: present
+
+# Stop services if existing
+
+- name: Stop apache service if present
+  service:
+    name: apache2
+    state: stopped
+  ignore_errors: yes
+
+- name: Enable apache mods
+  shell: a2enmod proxy proxy_http ssl rewrite headers
+
+- name: Generate apache config files
+  template:
+    src: templates/apache.conf.j2
+    dest: /etc/apache2/sites-available/{{ item }}.conf
+    owner: root
+    group: root
+    mode: '0644'
+  loop: "{{ web_domains }}"
+
+- name: Enable apache site
+  shell: a2ensite {{ item }}.conf
+  loop: "{{ web_domains }}"
+
+- name: Create dir
+  shell: mkdir /var/www/{{ item }}
+  loop: "{{ web_domains }}"
+  ignore_errors: yes
+
+- name: Start and enable apache2 service
+  service:
+    name: apache2
+    state: started
+    enabled: yes 
+

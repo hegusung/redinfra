@@ -1,0 +1,11 @@
+[Unit]
+Description=gophish-service
+
+[Service]
+Environment="GOPHISH_INITIAL_ADMIN_PASSWORD=admin"
+Type=simple
+WorkingDirectory=/opt/gophish/
+ExecStart=/opt/gophish/gophish
+
+[Install]
+WantedBy=multi-user.target

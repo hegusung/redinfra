@@ -1,0 +1,79 @@
+---
+mission: test
+enabled: false
+c2:
+  region: eu-west-1
+  instance_type: t2.micro
+  ports:
+    - 80
+    - 443
+  dns_A:
+    - test1.redteamdomain.com
+  dns_proxy:
+    - test3.redteamdomain.com
+  local_ip: 192.168.56.110
+phishing:
+  region: eu-west-2
+  instance_type: t2.micro
+  ports: 
+    - 25
+    - 80
+    - 443
+    - 587
+  dns_A:
+    - mx.redteamdomain.com
+  dns_proxy:
+    - test2.redteamdomain.com
+  dns:
+    MX:
+      - key: redteamdomain.com
+        value: mx.redteamdomain.com
+  mail:
+    - mail: john.doe@redteamdomain.com
+      name: John Doe
+  local_ip: 192.168.56.100
+  ansible: 
+    - playbook: install_mail.yml
+      args:
+        domains:
+          - domain: redteamdomain.com
+            users:
+              - name: John Doe
+                mail: john.doe
+                password: admin
+        sendgrid_password: SENDGRID_API 
+    - playbook: install_gophish.yml
+      args:
+        mails:
+          - john.doe@redteamdomain.com
+        web_domains:
+          - test2.redteamdomain.com
+        gophish_rid: token
+        gophish_track_uri: /product
+        gophish_uris:
+          - /login
+payloads:
+  region: eu-west-3
+  instance_type: t2.micro
+  ports:
+    - 80
+    - 443
+  dns_proxy:
+    - payloads.redteamdomain.com
+  local_ip: 192.168.56.101
+  ansible:
+    - playbook: install_web.yml
+      args:
+        web_domains:
+          - payloads.redteamdomain.com
+responder:
+  region: eu-north-1
+  instance_type: t3.micro
+  ports:
+    - 80
+    - 445
+  dns_A:
+    - smb.redteamdomain.com
+  local_ip: 192.168.56.102
+  ansible:
+    - playbook: install_responder.yml

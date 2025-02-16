@@ -1,0 +1,18 @@
+---
+api:
+  aws_key: AWS_KEY
+  aws_secret: AWS_SECRET
+  cloudflare_key: CLOUDFLARE_API_KEY
+  sendgrid_api: SENDGRID_API_KEY 
+tags:
+  Team: RedTeam
+  Owner: Test
+routing:
+  vpn_interface: tap0
+  iptables_chain: redinfra
+  vpn_range: 192.168.40.0/24
+  rule_start_table: 10
+  rule_priority: 30000
+vpn:
+  region: eu-west-1
+  instance_type: t2.micro

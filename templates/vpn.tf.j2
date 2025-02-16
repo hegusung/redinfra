@@ -1,0 +1,103 @@
+resource "aws_security_group" "sg_{{ name }}_{{ region }}" {
+  vpc_id = aws_vpc.main_vpc_{{ region }}.id
+
+  # Inbound Rules
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]  
+    description = "Allow SSH access"
+  }
+
+  ingress {
+    from_port   = 1194
+    to_port     = 1194
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]  # Allow OpenVPN from anywhere
+    description = "Allow OpenVPN access"
+  }
+
+  # Outbound Rules
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+  {% for key, value in tags.items() %}
+      {{ key }} = "{{ value }}",
+  {% endfor %}
+      Name = "{{ name }}-security-group"
+  }
+
+  provider = aws.{{ region }}
+}
+
+resource "aws_instance" "ec2_vpn" {
+  ami           = "{{ ami }}"
+  instance_type = "{{ instance_type }}"
+  key_name      = aws_key_pair.ssh_key_{{ region }}.key_name
+  subnet_id     = aws_subnet.main_subnet_{{ region }}.id
+  vpc_security_group_ids = [aws_security_group.sg_{{ name }}_{{ region }}.id]
+
+  tags = {
+  {% for key, value in tags.items() %}
+      {{ key }} = "{{ value }}",
+  {% endfor %}
+      Name = "{{ name }}"
+  }
+
+  provider = aws.{{ region }}
+}
+
+resource "aws_eip" "eip_vpn" {
+  instance = aws_instance.ec2_vpn.id
+
+  tags = {
+  {% for key, value in tags.items() %}
+      {{ key }} = "{{ value }}",
+  {% endfor %}
+      Name = "{{ name }}-ElasticIP"
+  }
+
+  provider = aws.{{ region }}
+}
+
+# Generate Inventory Files
+resource "local_file" "inventory_vpn" {
+  content = <<EOT
+[all:vars]
+ansible_ssh_common_args='-o StrictHostKeyChecking=accept-new'
+
+[vpn]
+${aws_eip.eip_vpn.public_ip} ansible_ssh_user=ubuntu ansible_ssh_private_key_file=../files/ansible
+EOT
+  filename = "inventory/vpn.ini"
+
+  depends_on = [aws_eip.eip_vpn]
+}
+
+# Detect Changes in vars.yml
+#data "local_file" "vars_vpn" {
+#  filename = "vars/vpn.yml"
+#}
+
+# Run Ansible Playbook for Web Servers using local-exec
+resource "null_resource" "ansible_vpn" {
+  triggers = {
+    instance_id = aws_instance.ec2_vpn.id
+    #vars_checksum = filemd5(data.local_file.vars_vpn.filename) 
+  }
+
+  provisioner "local-exec" {
+    command = <<EOT
+      #ansible-playbook -i ${local_file.inventory_vpn.filename} ../ansible/install_nginx.yml --extra-vars @vars/vpn.yml
+      ansible-playbook -i ${local_file.inventory_vpn.filename} ../ansible/install_vpn.yml --extra-vars "certificate_name=router" --extra-vars "base_vpn_ip={{ base_vpn_ip }}"
+    EOT
+  }
+
+  depends_on = [aws_eip.eip_vpn, local_file.inventory_vpn]
+}

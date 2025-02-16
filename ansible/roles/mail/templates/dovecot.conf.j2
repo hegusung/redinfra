@@ -1,0 +1,39 @@
+protocols = imap
+log_path = /var/log/dovecot.log
+
+#ssl = required
+#ssl_cert = </etc/ssl/certs/mailserver.crt
+#ssl_key = </etc/ssl/private/mailserver.key
+#ssl_dh_parameters_length=2048
+#ssl_cipher_list = ALL:!LOW:!SSLv2:!EXP:!aNULL
+
+disable_plaintext_auth = no
+mail_location = maildir:/var/spool/mail/%d/%n
+
+auth_verbose = yes
+
+passdb {
+ driver = passwd-file
+ args = /var/spool/mail/%d/shadow
+}
+
+userdb {
+ driver = static
+ args = uid=vmail gid=vmail home=/var/spool/mail/%d/%n
+}
+
+protocol lda {
+ postmaster_address = root@{{ domains[0].domain }}
+}
+
+service auth {
+  unix_listener /var/spool/postfix/private/auth {
+    mode = 0660
+    # Assuming the default Postfix user and group
+    user = postfix
+    group = postfix
+  }
+}
+
+# Outlook and Windows Mail works only with LOGIN mechanism, not the standard PLAIN:
+auth_mechanisms = plain login

@@ -1,0 +1,35 @@
+smtpd_banner = mail ESMTP
+biff = no
+
+# SSL settings
+smtpd_tls_cert_file=/etc/ssl/certs/mailserver.crt
+smtpd_tls_key_file=/etc/ssl/private/mailserver.key
+smtpd_use_tls=yes
+
+# SMTP
+smtp_sasl_auth_enable = yes
+smtp_sasl_password_maps = hash:/etc/postfix/sasl_passwd
+smtp_sasl_security_options = noanonymous
+smtp_sasl_tls_security_options = noanonymous
+smtp_tls_security_level = encrypt
+header_size_limit = 4096000
+relayhost = [smtp.sendgrid.net]:587
+mynetworks = /etc/postfix/mynetworks
+
+# Virtual mailbox settings
+virtual_mailbox_domains = /etc/postfix/virtual_domains
+virtual_mailbox_maps = hash:/etc/postfix/virtual_mailbox
+virtual_mailbox_base = /var/spool/mail
+virtual_uid_maps = static:1001
+virtual_gid_maps = static:1001
+
+# SASL settings
+smtpd_sasl_auth_enable = yes
+# delegate to dovecot
+smtpd_sasl_type = dovecot 
+smtpd_sasl_path = private/auth
+smtpd_sasl_security_options = noanonymous
+smtpd_sasl_local_domain =
+smtpd_relay_restrictions = permit_mynetworks permit_sasl_authenticated defer_unauth_destination
+smtpd_recipient_restrictions = permit_sasl_authenticated, permit_mynetworks, reject_unauth_destination
+

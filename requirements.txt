@@ -1,2 +1,5 @@
 boto3
 pyroute2
+sendgrid
+ansible-runner
+python-terraform

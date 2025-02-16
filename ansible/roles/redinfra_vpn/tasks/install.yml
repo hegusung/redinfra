@@ -1,0 +1,34 @@
+- name: Download OpenVPN Server install script
+  git:
+    repo: 'https://github.com/angristan/openvpn-install.git'
+    dest: '/opt/openvpn-install'
+    version: 'master'  # Optional: Specify the branch or tag (default is "master")
+    force: no  # Optional: Forcefully updates the repository if it already exists
+    update: no  # Ensures the repository is updated if it already exists
+
+- name: Install OpenVPN Server
+  command: /opt/openvpn-install/openvpn-install.sh
+  environment:
+    AUTO_INSTALL: "y"
+
+- name: Stop OpenVPN service
+  service:
+    name: openvpn      # Name of the service (replace with your service name)
+    state: stopped   # Ensures the service is stopped
+
+- name: Change IP range
+  command: sed -i 's/10.8.0.0/{{ base_vpn_ip }}/' /etc/openvpn/server.conf
+
+- name: Change dev tup to dev tap
+  command: sed -i 's/dev tun/dev tap/' /etc/openvpn/server.conf
+
+- name: Change UDP to TCP
+  command: sed -i 's/proto udp/proto tcp/' /etc/openvpn/server.conf
+
+- name: Disable gateway and permit client to client
+  command: sed -i 's/push "redirect-gateway def1 bypass-dhcp"/client-to-client/' /etc/openvpn/server.conf
+
+- name: Start OpenVPN service
+  service:
+    name: openvpn      # Name of the service (replace with your service name)
+    state: started   # Ensures the service is started

@@ -1,0 +1,10 @@
+---
+- name: Install Responder
+  hosts: host
+  gather_facts: no
+  become: yes
+  tasks:
+    - name: Install and configure Responder
+      include_role:
+        name: responder
+        tasks_from: setup_responder.yml
