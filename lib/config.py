@@ -58,7 +58,7 @@ class Config:
     def load_missions(self):
         mission_dict = {}
         
-        mission_config_files = [os.path.join(CONFIG_PATH, f) for f in os.listdir(CONFIG_PATH) if os.path.isfile(os.path.join(CONFIG_PATH, f)) and not f in ['main.yml', 'aws.yml']]
+        mission_config_files = [os.path.join(CONFIG_PATH, f) for f in os.listdir(CONFIG_PATH) if os.path.isfile(os.path.join(CONFIG_PATH, f)) and not f in ['main.yml', 'aws.yml'] and f.endswith('.yml')]
         for mission_config_file in mission_config_files:
             with open(mission_config_file) as stream:
                 mission_config = yaml.load(stream, DupCheckLoader)

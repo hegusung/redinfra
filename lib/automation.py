@@ -311,7 +311,7 @@ class Automation:
         playbooks = self.config.get_playbooks()
 
         # Delete previous inventory files
-        inventory_path = "data/inventory/"
+        inventory_path = "ansible/inventory/"
         for file in os.listdir(inventory_path):
             file_path = os.path.join(inventory_path, file)
             if os.path.isfile(file_path):
@@ -334,8 +334,8 @@ class Automation:
                     continue
 
             # Create inventory file
-            inventory_file = inventory_path + "inventory_%s_%s" % (playbook['mission'], playbook['name'])
-            f = open(inventory_file, 'w')
+            inventory_file = "inventory_%s_%s" % (playbook['mission'], playbook['name'])
+            f = open(inventory_path + inventory_file, 'w')
             f.write("""
 [all:vars]
 ansible_ssh_common_args='-o StrictHostKeyChecking=accept-new'
@@ -344,8 +344,6 @@ ansible_ssh_common_args='-o StrictHostKeyChecking=accept-new'
 %s ansible_ssh_user=root ansible_ssh_private_key_file=../files/ansible
 """ % playbook['local_ip'])
             f.close()
-
-            inventory_file = os.path.abspath(inventory_file)
 
             # Execute the playblook
             runner = ansible_runner.run(
@@ -394,12 +392,12 @@ ansible_ssh_common_args='-o StrictHostKeyChecking=accept-new'
             previous_execution['Execution'] = {}
 
 
-        inventory_path = "data/inventory/"
+        inventory_path = "ansible/inventory/"
         for playbook in playbooks:
             if playbook['mission'] == mission and playbook['name'] == server:
                 # Create inventory file
-                inventory_file = inventory_path + "inventory_%s_%s" % (playbook['mission'], playbook['name'])
-                f = open(inventory_file, 'w')
+                inventory_file = "inventory_%s_%s" % (playbook['mission'], playbook['name'])
+                f = open(inventory_path + inventory_file, 'w')
                 f.write("""
     [all:vars]
     ansible_ssh_common_args='-o StrictHostKeyChecking=accept-new'
@@ -408,8 +406,6 @@ ansible_ssh_common_args='-o StrictHostKeyChecking=accept-new'
     %s ansible_ssh_user=root ansible_ssh_private_key_file=../files/ansible
     """ % playbook['local_ip'])
                 f.close()
-
-                inventory_file = os.path.abspath(inventory_file)
 
                 # Execute the playblook
                 runner = ansible_runner.run(

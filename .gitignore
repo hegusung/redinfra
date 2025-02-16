@@ -24,6 +24,9 @@ ansible/*
 !ansible/files/
 ansible/files/*
 !ansible/files/.gitkeep
+!ansible/inventory/
+ansible/inventory/*
+!ansible/inventory/.gitkeep
 !ansible/roles/
 ansible/roles/*
 !ansible/roles/node/
