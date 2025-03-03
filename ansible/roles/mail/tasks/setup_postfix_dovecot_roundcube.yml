@@ -111,6 +111,14 @@
     group: root
     mode: '0644'
 
+- name: Generate /etc/postfix/virtual
+  template:
+    src: templates/virtual.j2
+    dest: /etc/postfix/virtual
+    owner: root
+    group: root
+    mode: '0644'
+
 - name: Generate /etc/postfix/mynetworks
   copy:
     dest: /etc/postfix/mynetworks
@@ -126,6 +134,11 @@
 - name: Postmap virtual_domains
   ansible.builtin.shell:
     cmd: postmap /etc/postfix/virtual_domains
+
+- name: Postmap virtual
+  ansible.builtin.shell:
+    cmd: postmap /etc/postfix/virtual
+
 
 - name: Postmap virtual_mailbox
   ansible.builtin.shell:
