@@ -37,3 +37,7 @@ service auth {
 
 # Outlook and Windows Mail works only with LOGIN mechanism, not the standard PLAIN:
 auth_mechanisms = plain login
+
+ssl = yes
+ssl_cert = </etc/ssl/certs/mailserver.crt
+ssl_key  = </etc/ssl/private/mailserver.key
