@@ -4,8 +4,10 @@ routing.cfg
 ansible.cfg
 terraform/*
 !terraform/inventory/
+terraform/inventory/*
 !terraform/inventory/.gitkeep
 !terraform/vars/
+terraform/vars/*
 !terraform/vars/.gitkeep
 files/*
 !files/.gitkeep
@@ -21,6 +23,7 @@ ansible/*
 !ansible/install_router.yml
 !ansible/install_vpn.yml
 !ansible/install_web.yml
+!ansible/install_mythic.yml
 !ansible/files/
 ansible/files/*
 !ansible/files/.gitkeep
@@ -35,6 +38,7 @@ ansible/roles/*
 !ansible/roles/mail/
 !ansible/roles/responder/
 !ansible/roles/web/
+!ansible/roles/mythic/
 #!ansible/roles/mail/defaults/main.yml
 #!ansible/roles/mail/tasks/setup_gophish.yml  
 #!ansible/roles/mail/tasks/setup_postfix_dovecot_roundcube.yml

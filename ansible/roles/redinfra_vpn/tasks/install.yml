@@ -6,6 +6,9 @@
     force: no  # Optional: Forcefully updates the repository if it already exists
     update: no  # Ensures the repository is updated if it already exists
 
+- name: Set openvpn install script
+  command: chmod +x /opt/openvpn-install/openvpn-install.sh
+
 - name: Install OpenVPN Server
   command: /opt/openvpn-install/openvpn-install.sh
   environment:

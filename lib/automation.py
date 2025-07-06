@@ -109,7 +109,11 @@ class Automation:
 
         config_mail_entries = self.config.get_mail_entries()
 
-        current_mail = self.sendgrid.get_config()
+        try:
+            current_mail = self.sendgrid.get_config()
+        except Exception as e:
+            print(e)
+            print(e.body)
 
         # Checking for deleted domains
         deleted_domains = list(set(current_mail.keys()) - set(config_mail_entries.keys()))
@@ -156,7 +160,12 @@ class Automation:
 
         self.sendgrid.disable_clicktracking()
 
-        current_mail = self.sendgrid.get_config()
+        try:
+            current_mail = self.sendgrid.get_config()
+        except Exception as e:
+            print("%s: %s" % (type(e), str(e)))
+            print(e.body)
+
 
         for domain in current_mail.keys():
             print("[+] [Sendgrid] Removing domain %s" % domain)

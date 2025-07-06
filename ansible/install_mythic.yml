@@ -1,0 +1,10 @@
+---
+- name: Install Mythic C2
+  hosts: host
+  gather_facts: no
+  become: yes
+  tasks:
+    - name: Install and configure Mythic C2
+      include_role:
+        name: mythic
+        tasks_from: setup_mythic.yml

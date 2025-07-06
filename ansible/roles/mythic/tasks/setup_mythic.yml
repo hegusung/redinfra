@@ -1,0 +1,73 @@
+- name: Update package cache
+  apt:
+    update_cache: yes
+
+- name: Install required packages
+  apt:
+    name:
+      - git
+      - python3
+      - python3-pip
+    state: present
+    update_cache: yes
+
+- name: Clone Mythic repository
+  git:
+    repo: "https://github.com/its-a-feature/Mythic.git"
+    dest: "/opt/mythic"
+    version: master
+    update: no
+
+- name: Set Mythic interface password in environment
+  lineinfile:
+    path: "/opt/mythic/.env"
+    create: yes
+    line: "MYTHIC_ADMIN_PASSWORD={{ mythic_password }}"
+    state: present
+
+- name: Build Mythic
+  shell: ./install_docker_ubuntu.sh
+  args:
+    chdir: "/opt/mythic"
+  environment:
+    MYTHIC_ADMIN_PASSWORD: "{{ mythic_password }}"
+
+- name: Start and enable Docker service
+  ansible.builtin.service:
+    name: docker
+    state: started
+    enabled: yes
+
+- name: Build Mythic
+  shell: make
+  args:
+    chdir: "/opt/mythic"
+  environment:
+    MYTHIC_ADMIN_PASSWORD: "{{ mythic_password }}"
+
+- name: Build Mythic containers
+  shell: ./mythic-cli start
+  args:
+    chdir: "/opt/mythic"
+  environment:
+    MYTHIC_ADMIN_PASSWORD: "{{ mythic_password }}"
+
+- name: Install github extensions
+  shell: "./mythic-cli install github {{ item }} -f"
+  args:
+    chdir: "/opt/mythic"
+  loop: "{{ github_extensions }}"
+
+- name: Upload local extensions
+  synchronize:
+    src: "../files/{{ item }}"
+    dest: "/opt/"
+    recursive: yes
+    delete: no
+  loop: "{{ local_extensions }}"
+
+- name: Install local extensions
+  shell: "./mythic-cli install folder /opt/{{ item }} -f"
+  args:
+    chdir: "/opt/mythic"
+  loop: "{{ local_extensions }}"
