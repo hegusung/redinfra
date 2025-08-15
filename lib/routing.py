@@ -240,7 +240,13 @@ class Routing():
                     'gateway': aws_vpn_ip,
                     }
             print("[+] Creating default route to %s in table %d" % (aws_vpn_ip, table_id))
-            ndb.routes.create(dst='default', table=table_id, gateway=aws_vpn_ip).commit()
+            try:
+                ndb.routes.create(dst='default', table=table_id, gateway=aws_vpn_ip).commit()
+            except KeyError:
+                # Delete old
+                ndb.routes[{'table': table_id}].remove().commit()
+                # Create new
+                ndb.routes.create(dst='default', table=table_id, gateway=aws_vpn_ip).commit()
             #ipdb.routes.add(spec).commit()
 
             table_id += 1

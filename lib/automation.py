@@ -1,4 +1,5 @@
 import os
+import traceback
 import json
 import configparser
 import os.path
@@ -10,11 +11,12 @@ ANSIBLE_FILE = "ansible.cfg"
 
 class Automation:
 
-    def __init__(self, config, aws, cloudflare, sendgrid, routing):
+    def __init__(self, config, aws, cloudflare, sendgrid, o365, routing):
         self.config = config
         self.aws = aws
         self.cloudflare = cloudflare
         self.sendgrid = sendgrid
+        self.o365 = o365
         self.routing = routing
         
         self.terraform = Terraform(config)
@@ -38,6 +40,9 @@ class Automation:
             return
 
         if not self.update_sendgrid():
+            return
+
+        if not self.update_o365():
             return
 
         if not self.update_cloudflare():
@@ -175,6 +180,25 @@ class Automation:
         return True
 
 
+    def update_o365(self):
+
+        config = self.config.get_o365()
+
+        tenants = self.o365.setup_tenants(config)
+
+        for tenant in tenants:
+            tenant.delete_old_users()
+            tenant.delete_old_domains()
+            tenant.create_new_domains()
+            tenant.create_new_users()
+
+        return True
+
+    def clear_o365(self):
+        raise NotImplementedError("clear_o365")
+
+        return True
+
     def update_cloudflare(self): 
 
         print("[+] Creating the DNS entries in cloudflare")
@@ -184,6 +208,9 @@ class Automation:
         current_mail = self.sendgrid.get_config()
 
         config_dns = self.config.get_dns()
+        
+        config_o365 = self.config.get_o365()
+        tenants = self.o365.setup_tenants(config_o365)
 
         aws_instances = self.aws._list_aws() 
 
@@ -217,32 +244,51 @@ class Automation:
 
                             config_dns_dict[dns_hash] = ('proxy', info[0], ip)
                 else:
-                    dns_hash = "%s_%s_%s" % (type, info[0], info[1])
+                    if type == "MX":
+                        dns_hash = "%s_%s_%s" % (type, info[0], info[1])
+                        config_dns_dict[dns_hash] = (type, info[0], info[1], {'priority': 10})
+                    elif type == "TXT":
+                        if not info[1].startswith('"'):
+                            content = "\"%s\"" % info[1]
+                        else:
+                            content = info[1]
+                        dns_hash = "%s_%s_%s" % (type, info[0], content)
+                        config_dns_dict[dns_hash] = (type, info[0], content)
+                    else:
+                        dns_hash = "%s_%s_%s" % (type, info[0], info[1])
+                        config_dns_dict[dns_hash] = (type, info[0], info[1])
 
-                    config_dns_dict[dns_hash] = (type, info[0], info[1])
-
-        # Mail entries
+        # Mail entries (Sendgrid)
         for _, data in current_mail.items():
             for entry in data['dns']:
                 dns_hash = "%s_%s_%s" % (entry['type'].upper(), entry['key'], entry['value'])
                 config_dns_dict[dns_hash] = (entry['type'], entry['key'], entry['value'])
 
-        current_dns_config = self.cloudflare.get_dns()
-        current_dns_config_dict = {}
-        for key, info in current_dns_config.items():
-            if info['proxied'] == True:
-                dns_hash = "proxy_%s_%s" % (key, info['content'])
+        # O365 config
+        for tenant in tenants:
+            for entry in tenant.get_dns_entries():
+                if entry['recordType'] == "Mx":
+                    dns_hash = "MX_%s_%s" % (entry["label"], entry['mailExchange'])
+                    config_dns_dict[dns_hash] = ("MX", entry['label'], entry['mailExchange'], {'priority': entry['preference']})
+                elif entry['recordType'] == "CName":
+                    dns_hash = "CNAME_%s_%s" % (entry["label"], entry['canonicalName'])
+                    config_dns_dict[dns_hash] = ("CNAME", entry['label'], entry['canonicalName'])
+                elif entry['recordType'] == "Txt":
+                    dns_hash = "TXT_%s_\"%s\"" % (entry["label"], entry['text'])
+                    config_dns_dict[dns_hash] = ("TXT", entry['label'], "\"%s\"" % entry['text'])
+                elif entry['recordType'] == "Srv":
+                    dns_hash = "SRV_%s_%d %d %s" % (entry["label"][len(entry['service']) + len(entry['protocol']) + 2:], entry['weight'], entry['port'], entry['nameTarget'])
+                    config_dns_dict[dns_hash] = ("SRV", entry['label'], entry['nameTarget'], {'service': entry['service'], 'protocol': entry['protocol'], 'priority': entry['priority'], 'weight': entry['weight'], 'port': entry['port']})
+                else:
+                    raise NotImplementedError("O365 DNS entry: %s" % entry)
 
-                current_dns_config_dict[dns_hash] = ('proxy', key, info['content'])
-            else:
-                dns_hash = "%s_%s_%s" % (info['type'].upper(), key, info['content'])
-                
-                current_dns_config_dict[dns_hash] = (info['type'], key, info['content'])
+
+        current_dns_config_dict = self.cloudflare.get_dns()
 
         # Checking for deleted dns
         deleted_dns = list(set(current_dns_config_dict.keys()) - set(config_dns_dict.keys()))
         for dns_hash in deleted_dns:
-            print("[+] [Cloudflare] Removing DNS [%s] %s => %s" % current_dns_config_dict[dns_hash])
+            print("[+] [Cloudflare] Removing DNS [%s] %s => %s" % current_dns_config_dict[dns_hash][:3])
 
             dns_info = current_dns_config_dict[dns_hash]
             if dns_info[0] == 'proxy':
@@ -253,13 +299,16 @@ class Automation:
         # Checking for new domains
         new_dns = list(set(config_dns_dict.keys()) - set(current_dns_config_dict.keys()))
         for dns_hash in new_dns:
-            print("[+] [Cloudflare] Creating DNS [%s] %s => %s" % config_dns_dict[dns_hash])
+            print("[+] [Cloudflare] Creating DNS [%s] %s => %s" % config_dns_dict[dns_hash][:3])
 
             dns_info = config_dns_dict[dns_hash]
             if dns_info[0] == 'proxy':
                 self.cloudflare.new_dns(dns_info[1], dns_info[2], dns_type='A', proxied=True)
             else:
-                self.cloudflare.new_dns(dns_info[1], dns_info[2], dns_type=dns_info[0])
+                if len(dns_info) == 3:
+                    self.cloudflare.new_dns(dns_info[1], dns_info[2], dns_type=dns_info[0])
+                else:
+                    self.cloudflare.new_dns(dns_info[1], dns_info[2], dns_type=dns_info[0], **dns_info[3])
 
         print("[+] Done")
         return True
@@ -382,6 +431,9 @@ ansible_ssh_common_args='-o StrictHostKeyChecking=accept-new'
             return
 
         if not self.clear_sendgrid():
+            return
+
+        if not self.clear_o365():
             return
 
         if not self.clear_cloudflare():

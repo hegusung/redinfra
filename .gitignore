@@ -1,5 +1,6 @@
 *.pyc
 *.pyo
+*.hcl
 routing.cfg
 ansible.cfg
 terraform/*

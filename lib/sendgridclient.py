@@ -137,12 +137,16 @@ class SendGrid:
                 'value': "\"v=DMARC1; p=none;\""
             })
 
-        response = self.sg.client.senders.get()
-        response_json = json.loads(response.body)
+        # This API bugs with forbidden, WHY ????
+        try:
+            response = self.sg.client.senders.get()
+            response_json = json.loads(response.body)
 
-        for sender_info in response_json:
-            domain = sender_info['from']['email'].split('@')[-1]
-            email_config[domain]['email'][sender_info['from']['email']] = sender_info['from']['name']
+            for sender_info in response_json:
+                domain = sender_info['from']['email'].split('@')[-1]
+                email_config[domain]['email'][sender_info['from']['email']] = sender_info['from']['name']
+        except Exception as e:
+            print("[-] SENDGRID API ERROR: get senders")
 
         return email_config
 
@@ -187,7 +191,7 @@ class SendGrid:
 
                 if res == 1:
                     print("[-] Failed to remove the DNS")
-                    raise StopIteration
+                    #raise StopIteration
                 elif res == 2:
                     print("[-] DNS entry does not exist")
         except StopIteration:
@@ -197,7 +201,7 @@ class SendGrid:
         res = self.cloudflare.remove_dns("_dmarc.%s" % domain, "\"v=DMARC1; p=none;\"", dns_type="TXT")
         if res != 0:
             print("[-] Failed to remove the DNS")
-            return 1
+            #return 1
 
         print("[+] DNS entries removed from CloudFlare")
 

@@ -113,13 +113,14 @@ class Config:
         node_list = []
         for mission, mission_info in self.missions.items():
             for name, srv_info in mission_info.items():
-                node_list.append({
-                    'mission': mission,
-                    'name': name,
-                    'region': srv_info['region'],
-                    'ports': srv_info['ports'],
-                    'instance_type': srv_info['instance_type'],
-                })
+                if 'region' in srv_info and 'ports' in srv_info and 'instance_type' in srv_info:
+                    node_list.append({
+                        'mission': mission,
+                        'name': name,
+                        'region': srv_info['region'],
+                        'ports': srv_info['ports'],
+                        'instance_type': srv_info['instance_type'],
+                    })
 
         return node_list
 
@@ -168,15 +169,16 @@ class Config:
 
         for mission, mission_info in self.missions.items():
             for name, srv_info in mission_info.items():
-                node_name = "Node_%s_%s" % (mission, name)
-                local_ip = srv_info['local_ip']
-                ports = srv_info['ports']
+                if 'local_ip' in srv_info and 'ports' in srv_info:
+                    node_name = "Node_%s_%s" % (mission, name)
+                    local_ip = srv_info['local_ip']
+                    ports = srv_info['ports']
 
-                routing.append({
-                    'node_name': node_name,
-                    'local_ip': local_ip,
-                    'ports': ports,
-                })
+                    routing.append({
+                        'node_name': node_name,
+                        'local_ip': local_ip,
+                        'ports': ports,
+                    })
 
         return routing
 
@@ -185,19 +187,58 @@ class Config:
 
         for mission, mission_info in self.missions.items():
             for name, srv_info in mission_info.items():
-                local_ip = srv_info['local_ip']
-                
-                if 'ansible' in srv_info:
-                    for playbook_info in srv_info['ansible']:
-                        playbooks.append({
-                            'mission': mission,
-                            'name': name,
-                            'local_ip': local_ip,
-                            'playbook': playbook_info['playbook'],
-                            'args': playbook_info['args'] if 'args' in playbook_info else {}
-                        })
+                if 'local_ip' in srv_info:
+                    local_ip = srv_info['local_ip']
+                    
+                    if 'ansible' in srv_info:
+                        for playbook_info in srv_info['ansible']:
+                            playbooks.append({
+                                'mission': mission,
+                                'name': name,
+                                'local_ip': local_ip,
+                                'playbook': playbook_info['playbook'],
+                                'args': playbook_info['args'] if 'args' in playbook_info else {}
+                            })
 
         return playbooks
+
+    def get_o365(self):
+        o365 = {}
+
+        for conf in self.get_api_key("o365"):
+            key = conf['tenant_id']
+            if not key in o365:
+                o365[key] = {
+                    "tenant_id": conf["tenant_id"],
+                    "client_id": conf["client_id"],
+                    "client_secret": conf["client_secret"],
+                    "domains": {}
+                }
+
+        for mission, mission_info in self.missions.items():
+            for name, srv_info in mission_info.items():
+                if 'o365' in srv_info:
+                    conf = srv_info['o365']
+
+                    for domain_info in conf["domains"]:
+                        domain = domain_info["domain"]
+
+                        if not domain in o365[key]["domains"]:
+                            o365[key]["domains"][domain] = {
+                                "services": domain_info["services"],
+                                "emails": {}
+                            }
+                        else:
+                            # TODO: update services
+                            pass
+
+                        for user_info in domain_info["emails"]:
+                            email = user_info["email"]
+
+                            if not email in o365[key]["domains"][domain]["emails"]:
+                                o365[key]["domains"][domain]["emails"][email] = user_info
+
+        return o365
 
     # == Terraform changes ==
 
