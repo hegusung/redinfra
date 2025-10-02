@@ -241,11 +241,7 @@ class Routing():
                     'table': table_id,
                     'gateway': aws_vpn_ip,
                     }
-<<<<<<< HEAD
             print(color("    [+] Creating default route to %s in table %d" % (aws_vpn_ip, table_id), "green"))
-            ndb.routes.create(dst='default', table=table_id, gateway=aws_vpn_ip).commit()
-=======
-            print("[+] Creating default route to %s in table %d" % (aws_vpn_ip, table_id))
             try:
                 ndb.routes.create(dst='default', table=table_id, gateway=aws_vpn_ip).commit()
             except KeyError:
@@ -253,7 +249,6 @@ class Routing():
                 ndb.routes[{'table': table_id}].remove().commit()
                 # Create new
                 ndb.routes.create(dst='default', table=table_id, gateway=aws_vpn_ip).commit()
->>>>>>> c5c09229d99c62d46c81a622272dc6342e9e1003
             #ipdb.routes.add(spec).commit()
 
             table_id += 1
