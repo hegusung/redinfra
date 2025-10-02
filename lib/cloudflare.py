@@ -82,12 +82,21 @@ class CloudFlare:
             dns_json = self.query("/zones/%s/dns_records" % zone_id)
 
             for dns_info in dns_json["result"]:
+                if dns_info['proxied'] == True:
+                    dns_hash = "proxy_%s_%s" % (dns_info['name'], dns_info['content'])
+                else:
+                    dns_hash = "%s_%s_%s" % (dns_info['type'].upper(), dns_info['name'], dns_info['content'])
 
-                output[dns_info['name']] = {
+                output[dns_hash] = (dns_info['type'], dns_info['name'], dns_info['content'])
+
+                """
+                output[dns_hash] = {
+                    'name': dns_info['name'],
                     'type': dns_info['type'],
                     'content': dns_info['content'],
                     'proxied': dns_info['proxied']
                 }
+                """
 
         return output
 
@@ -112,7 +121,7 @@ class CloudFlare:
                     print("     %s %s %s" % (dns_info['name'].ljust(40), dns_info['type'].ljust(10), dns_info['content']))
 
   
-    def new_dns(self, domain, value, dns_type='A', proxied=False):
+    def new_dns(self, domain, value, dns_type='A', proxied=False, priority=10, service=None, protocol=None, weight=0, port=0):
         print(color("    [*] Setting new domain %s = %s => %s (proxied: %s)" % (domain, dns_type, value, proxied), "blue"))
 
         json = self.query("/zones")
@@ -131,7 +140,21 @@ class CloudFlare:
                 }
 
                 if dns_type == 'MX':
-                    data['priority'] = 10
+                    data['priority'] = priority
+                elif dns_type == 'SRV':
+                    del data['content']
+                    del data['name']
+                    del data['proxied']
+
+                    data['name'] = domain[len(service) + len(protocol) + 2:]
+                    data['data'] = {
+                        'service': service,
+                        'proto': protocol,
+                        'priority': priority,
+                        'weight': weight,
+                        'port': port,
+                        'target': value,
+                    }
 
                 dns_json = self.query("/zones/%s/dns_records" % zone_id, post=data)
 

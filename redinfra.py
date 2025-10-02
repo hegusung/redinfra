@@ -4,6 +4,7 @@ import argparse
 from lib.aws import AWS
 from lib.cloudflare import CloudFlare
 from lib.sendgridclient import SendGrid
+from lib.o365 import O365
 from lib.routing import Routing
 from lib.terraform import Terraform
 from lib.automation import Automation
@@ -22,6 +23,7 @@ def main():
     auto_parser.add_argument('--destroy', action='store_true', help='Cleanup everything', dest='destroy')
     auto_parser.add_argument('--apply-terraform', action='store_true', help='Execute all the steps to deploy the config', dest='apply_terraform')
     auto_parser.add_argument('--apply-sendgrid', action='store_true', help='Execute all the steps to deploy the config', dest='apply_sendgrid')
+    auto_parser.add_argument('--apply-o365', action='store_true', help='Execute all the steps to deploy the config', dest='apply_o365')
     auto_parser.add_argument('--apply-cloudflare', action='store_true', help='Execute all the steps to deploy the config', dest='apply_cloudflare')
     auto_parser.add_argument('--apply-routing', action='store_true', help='Execute all the steps to deploy the config', dest='apply_routing')
     auto_parser.add_argument('--apply-ansible', action='store_true', help='Execute all the steps to deploy the config', dest='apply_ansible')
@@ -80,8 +82,9 @@ def main():
     aws = AWS(config, cloudflare)
     sendgrid = SendGrid(config, cloudflare)
     routing = Routing(config)
+    o365 = O365(cloudflare)
 
-    auto = Automation(config, aws, cloudflare, sendgrid, routing) 
+    auto = Automation(config, aws, cloudflare, sendgrid, o365, routing) 
 
     if args.command == 'auto':
         if args.install_redinfra:
@@ -93,23 +96,27 @@ def main():
         elif args.destroy:
             auto.destroy()
 
-        elif args.apply_terraform:
-            auto.apply_terraform()
+        else:
+            if args.apply_terraform:
+                auto.apply_terraform()
 
-        elif args.apply_sendgrid:
-            auto.update_sendgrid()
+            if args.apply_sendgrid:
+                auto.update_sendgrid()
 
-        elif args.apply_cloudflare:
-            auto.update_cloudflare()
+            if args.apply_o365:
+                auto.update_o365()
 
-        elif args.apply_routing:
-            auto.update_routing()
+            if args.apply_cloudflare:
+                auto.update_cloudflare()
 
-        elif args.apply_ansible:
-            auto.update_ansible()
+            if args.apply_routing:
+                auto.update_routing()
 
-        elif args.playbooks:
-            auto.execute_playbooks(args.playbooks[0], args.playbooks[1])
+            if args.apply_ansible:
+                auto.update_ansible()
+
+            if args.playbooks:
+                auto.execute_playbooks(args.playbooks[0], args.playbooks[1])
 
 
     elif args.command == 'aws':
