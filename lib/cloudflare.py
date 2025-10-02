@@ -3,6 +3,8 @@ import sys
 import requests
 import configparser
 
+from lib.color import color
+
 class CloudFlare:
     def __init__(self, config):
         self.config = config
@@ -51,9 +53,9 @@ class CloudFlare:
 
             # Check response
             if response.status_code == 200:
-                print("[+] SSL mode updated successfully for zone %s:" % zone, response.json()["result"]["value"])
+                print(color("    [+] SSL mode updated successfully for zone %s: %s" % (zone, response.json()["result"]["value"]), "green"))
             else:
-                print("[-] Failed to update SSL mode for zone %s:" % zone, response.json())
+                print(color("    [-] Failed to update SSL mode for zone %s: %s" % (zone, response.json()), "red"))
 
     def delete(self, uri):
         headers = {
@@ -105,13 +107,13 @@ class CloudFlare:
 
             for dns_info in dns_json["result"]:
                 if dns_info['type'] == 'A':
-                    print("\t %s %s %s (proxied: %s)" % (dns_info['name'].ljust(40), dns_info['type'].ljust(10), dns_info['content'].ljust(40), dns_info['proxied'] ))
+                    print("     %s %s %s (proxied: %s)" % (dns_info['name'].ljust(40), dns_info['type'].ljust(10), dns_info['content'].ljust(40), dns_info['proxied'] ))
                 else:
-                    print("\t %s %s %s" % (dns_info['name'].ljust(40), dns_info['type'].ljust(10), dns_info['content']))
+                    print("     %s %s %s" % (dns_info['name'].ljust(40), dns_info['type'].ljust(10), dns_info['content']))
 
   
     def new_dns(self, domain, value, dns_type='A', proxied=False):
-        print("[+] Setting new domain %s = %s => %s (proxied: %s)" % (domain, dns_type, value, proxied))
+        print(color("    [*] Setting new domain %s = %s => %s (proxied: %s)" % (domain, dns_type, value, proxied), "blue"))
 
         json = self.query("/zones")
 
@@ -134,16 +136,16 @@ class CloudFlare:
                 dns_json = self.query("/zones/%s/dns_records" % zone_id, post=data)
 
                 if dns_json['success'] == True:
-                    print("[+] Success !")
+                    print(color("    [+] Success !", "green"))
                 else:
-                    print("[-] Fail: %s" % dns_json['errors'][0]['message'])
+                    print(color("    [-] Fail: %s" % dns_json['errors'][0]['message'], "red"))
                     return 1
 
         return 0
 
 
     def remove_dns(self, domain, value, dns_type='A'):
-        print("[+] Removing dns entry %s = %s => %s" % (domain, dns_type, value))
+        print(color("    [*] Removing dns entry %s = %s => %s" % (domain, dns_type, value), "blue"))
 
         json = self.query("/zones")
 
@@ -163,14 +165,14 @@ class CloudFlare:
 
                         if delete_json['success'] == True:
                             found = True
-                            print("[+] Success !")
+                            print(color("    [+] Success !", "green"))
                             return 0
                         else:
-                            print("[-] Fail: %s" % delete_json['errors'][0]['message'])
+                            print(color("    [-] Fail: %s" % delete_json['errors'][0]['message'], "red"))
                             return 1
             
         if not found:
-            print("Unable to find DNS")
+            print(color("    [-] Unable to find DNS", "red"))
 
             return 2
 

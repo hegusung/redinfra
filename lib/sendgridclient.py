@@ -5,6 +5,8 @@ import time
 import sendgrid 
 import configparser
 
+from lib.color import color
+
 class SendGrid:
 
     def __init__(self, config, cloudflare):
@@ -25,16 +27,16 @@ class SendGrid:
 
         try:
             response = self.sg.client.tracking_settings.click.patch(request_body=data)
-            print("[+] Click tracking has been disabled globally.")
+            print(color("    [+] Click tracking has been disabled globally.", "green"))
 
             return 0
         except HTTPError as e:
-            print("[-] Failed to update settings:", e)
+            print(color("    [-] Failed to update settings: " + str(e), "red"))
 
             return 1
 
     def new_domain(self, domain):
-        print("[+] Registring the domain %s in SendGrid" % domain)
+        print(color("    [*] Registring the domain %s in SendGrid" % domain, "blue"))
 
         data = {
             "automatic_security": True,
@@ -45,26 +47,26 @@ class SendGrid:
         try:
             response = self.sg.client.whitelabel.domains.post(request_body=data)
         except Exception as e:
-            print("[-] Failed to add domain to SendGrid")
+            print(color("    [-] Failed to add domain to SendGrid", "red"))
             return 1
 
         if response.status_code == 201:
-            print("[+] Domain added to SendGrid")
+            print(color("    [+] Domain added to SendGrid", "green"))
         else:
-            print("[-] Failed to add domain to SendGrid: %s" % response.body)
+            print(color("    [-] Failed to add domain to SendGrid: %s" % response.body, "red"))
             return 1
 
         response_json = json.loads(response.body)
         domain_id = response_json['id']
 
-        print("[+] Creating associated DNS entries")
+        print(color("    [*] Creating associated DNS entries", "blue"))
 
         try:
             for key, dns_entry in response_json['dns'].items():
                 res = self.cloudflare.new_dns(dns_entry['host'], dns_entry['data'], dns_type=dns_entry['type'].upper())
 
                 if res != 0:
-                    print("[-] Failed to add the DNS")
+                    print(color("    [-] Failed to add the DNS", "red"))
                     raise StopIteration
         except StopIteration:
             return 1
@@ -72,23 +74,23 @@ class SendGrid:
         # Adding DMARC
         res = self.cloudflare.new_dns("_dmarc.%s" % domain, "\"v=DMARC1; p=none;\"", dns_type="TXT")
         if res != 0:
-            print("[-] Failed to add the DNS")
+            print(color("    [-] Failed to add the DNS", "red"))
             return 1
 
-        print("[+] DNS entries added to CloudFlare")
+        print(color("    [*] DNS entries added to CloudFlare", "blue"))
 
         validated = True
         for _ in range(10):
-            print("[+] Waiting 10 seconds before validating")
+            print(color("    [*] Waiting 10 seconds before validating", "blue"))
 
             time.sleep(10)
 
-            print("[+] Validating the domain")
+            print(color("    [*] Validating the domain", "blue"))
 
             try:
                 response = self.sg.client.whitelabel.domains._(domain_id).validate.post()
             except Exception as e:
-                print("[-] Failed to validate the domain")
+                print(color("    [-] Failed to validate the domain", "red"))
                 return 1
 
             response_json = json.loads(response.body)
@@ -101,12 +103,12 @@ class SendGrid:
             if validated:
                 break
 
-            print("[-] Failed to validated the domain")
+            print(color("    [-] Failed to validated the domain", "red"))
         
         if validated:
-            print("[+] Domain validated")
+            print(color("    [+] Domain validated", "green"))
         else:
-            print("[-] Failed to validate the domain")
+            print(color("    [-] Failed to validate the domain", "red"))
 
         return 0
 
@@ -163,7 +165,7 @@ class SendGrid:
         return 0
 
     def delete_domain(self, domain):
-        print("[+] Getting the domain ID for the domain %s from SendGrid" % domain)
+        print(color("    [*] Getting the domain ID for the domain %s from SendGrid" % domain, "blue"))
 
         params = {
             'domain': domain,
@@ -174,34 +176,34 @@ class SendGrid:
         response_json = json.loads(response.body)[0]
 
         if len(response_json) == 0:
-            print("[-] Domain not found")
+            print(color("    [-] Domain not found", "red"))
             return 1
 
         domain_id = response_json["id"]
 
-        print("[+] Deleting associated DNS entries")
+        print(color("    [*] Deleting associated DNS entries", "blue"))
 
         try:
             for key, dns_entry in response_json['dns'].items():
                 res = self.cloudflare.remove_dns(dns_entry['host'], dns_entry['data'], dns_type=dns_entry['type'].upper())
 
                 if res == 1:
-                    print("[-] Failed to remove the DNS")
+                    print(color("    [-] Failed to remove the DNS", "red"))
                     raise StopIteration
                 elif res == 2:
-                    print("[-] DNS entry does not exist")
+                    print(color("    [-] DNS entry does not exist", "red"))
         except StopIteration:
             return 1
 
         # Adding DMARC
         res = self.cloudflare.remove_dns("_dmarc.%s" % domain, "\"v=DMARC1; p=none;\"", dns_type="TXT")
         if res != 0:
-            print("[-] Failed to remove the DNS")
+            print(color("    [-] Failed to remove the DNS", "red"))
             return 1
 
-        print("[+] DNS entries removed from CloudFlare")
+        print(color("    [+] DNS entries removed from CloudFlare", "green"))
 
-        print("[+] Removing the senders related to the domain %s" % domain)
+        print(color("    [*] Removing the senders related to the domain %s" % domain, "blue"))
 
         response = self.sg.client.senders.get()
         response_json = json.loads(response.body)
@@ -211,30 +213,30 @@ class SendGrid:
             sender_email = sender_info['from']['email']
 
             if sender_email.endswith("@%s" % domain):
-                print("[+] Deleting sender %s <%s>" % (sender_name, sender_email))
+                print(color("    [*] Deleting sender %s <%s>" % (sender_name, sender_email), "blue"))
                 sender_id = sender_info['id']
 
                 try:
                     response = self.sg.client.senders._(sender_id).delete()
                 
-                    print("[+] Sender deleted")
+                    print(color("    [+] Sender deleted", "green"))
                 except Exception as e:
-                    print("[-] Failed to delete the sender")
+                    print(color("    [-] Failed to delete the sender", "red"))
 
-        print("[+] Senders removed")
+        print(color("    [+] Senders removed", "green"))
 
-        print("[+] Removing the domain %s from SendGrid" % domain)
+        print(color("    [*] Removing the domain %s from SendGrid" % domain, "blue"))
 
         try:
             response = self.sg.client.whitelabel.domains._(domain_id).delete()
         except Exception as e:
-            print("[-] Failed to remove the domain")
+            print(color("    [-] Failed to remove the domain", "red"))
             return 1
 
         if response.status_code == 204:
-            print("[+] Domain removed")
+            print(color("    [+] Domain removed", "green"))
         else:
-            print("[-] Failed to remove the domain")
+            print(color("    [-] Failed to remove the domain", "red"))
             return 1
 
         return 0
@@ -251,7 +253,7 @@ class SendGrid:
         return 0
 
     def new_sender(self, name, email):
-        print("[+] Registring the sender %s <%s> in SendGrid" % (name, email))
+        print(color("    [*] Registring the sender %s <%s> in SendGrid" % (name, email), "blue"))
 
         data = {
             "address": "*",
@@ -272,18 +274,18 @@ class SendGrid:
         try:
             response = self.sg.client.senders.post(request_body=data)
         except Exception as e:
-            print("[-] Failed to register the sender")
+            print(color("    [-] Failed to register the sender", "red"))
             return 1
 
         if response.status_code == 201:
-            print("[+] Sender %s <%s> registered" % (name, email))
+            print(color("    [+] Sender %s <%s> registered" % (name, email), "green"))
             return 0
 
-        print("[-] Failed to register the sender")
+        print(color("    [-] Failed to register the sender", "red"))
         return 1
 
     def delete_sender(self, email):
-        print("[+] Deleting the sender %s in SendGrid" % (email,))
+        print(color("    [+] Deleting the sender %s in SendGrid" % (email,), "blue"))
 
         response = self.sg.client.senders.get()
         response_json = json.loads(response.body)
@@ -293,28 +295,27 @@ class SendGrid:
             sender_email = sender_info['from']['email']
 
             if sender_email == email:
-                print("[+] Sender found")
                 sender_id = sender_info['id']
                 break
         else:
-            print("[-] Sender not found")
+            print(color("    [-] Sender not found", "red"))
             return 1
 
         if sender_id == None:
-            print("[-] Sender not found")
+            print(color("    [-] Sender not found", "red"))
             return 1
 
         try:
             response = self.sg.client.senders._(sender_id).delete()
         except Exception as e:
-            print("[-] Failed to delete the sender")
+            print(color("    [-] Failed to delete the sender", "red"))
             return 1
 
         if response.status_code == 204:
-            print("[+] Sender deleted")
+            print(color("    [+] Sender deleted", "green"))
             return 0
 
-        print("[-] Failed to register the sender")
+        print(color("    [-] Failed to register the sender", "red"))
         return 1
 
 

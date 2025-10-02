@@ -5,6 +5,7 @@ import os.path
 import ansible_runner
 
 from lib.terraform import Terraform
+from lib.color import color
 
 ANSIBLE_FILE = "ansible.cfg"
 
@@ -26,10 +27,10 @@ class Automation:
         )
 
         if runner.rc == 0:
-            print("[+] RedInfra server packages installed")
+            print(color("[+] RedInfra server packages installed", "green"))
         else:
-            print("Playbook execution failed!")
-            print("STDERR:", runner.stderr.read())
+            print(color("Playbook execution failed!", "red"))
+            print(color("STDERR:" + str(runner.stderr.read()), "red"))
 
 
     def apply(self):
@@ -52,12 +53,12 @@ class Automation:
 
     def delete_terraform(self):
 
-        print("[+] Deletion of old terraform files")
+        print(color("[*] Deletion of old terraform files", "blue"))
 
         return_code = self.terraform.destroy()
 
         if return_code != 0:
-            print("[-] ERROR")
+            print(color("[-] ERROR", "red"))
             return False
 
         self.terraform.delete_terraform_files()
@@ -65,19 +66,19 @@ class Automation:
         # Config changed lets reload it
         self.routing.reload_config()
 
-        print("[+] Done")
+        print(color("[*] Done", "blue"))
         return True
 
     def apply_terraform(self):
         self.terraform.delete_terraform_files()
 
-        print("[+] Creation of new terraform files")
+        print(color("[*] Creation of new terraform files", "blue"))
         self.terraform.create_tf_files()
 
         return_code = self.terraform.apply()
 
         if return_code != 0:
-            print("[-] ERROR")
+            print(color("[-] ERROR", "red"))
             return False
 
         # Config changed lets reload it
@@ -85,46 +86,46 @@ class Automation:
 
         self.update_config_instances()
 
-        print("[+] Done")
+        print(color("[*] Done", "blue"))
         return True
 
 
     def update_config_instances(self):
 
-        print("[+] Removing deleted instances from the config")
+        print(color("[*] Removing deleted instances from the config", "blue"))
         aws_instances = [item[0] for item in self.aws._list_aws() if item[1].startswith('Node_') and item[2] != 'terminated'] 
 
         config_ids = self.routing._get_config_instance_ids()
 
         for deleted_id in list(set(config_ids) - set(aws_instances)):
-            print("[+] Removing instance %s from the config" % deleted_id)
+            print(color("    [+] Removing instance %s from the config" % deleted_id, "green"))
             self.routing.remove_vpn_ip(deleted_id)
 
-        print("[+] Done")
+        print(color("[*] Done", "blue"))
         return True
 
     def update_sendgrid(self):
 
-        print("[+] Creating the SendGrid mail entries")
+        print(color("[*] Creating the SendGrid mail entries", "blue"))
 
         config_mail_entries = self.config.get_mail_entries()
 
         try:
             current_mail = self.sendgrid.get_config()
         except Exception as e:
-            print(e)
-            print(e.body)
+            print(color(str(e), "red"))
+            print(color(str(e.body), "red"))
 
         # Checking for deleted domains
         deleted_domains = list(set(current_mail.keys()) - set(config_mail_entries.keys()))
         for domain in deleted_domains:
-            print("[+] [Sendgrid] Removing domain %s" % domain)
+            print(color("    [+] [Sendgrid] Removing domain %s" % domain, "green"))
             self.sendgrid.delete_domain(domain)
 
         # Checking for new domains
         new_domains = list(set(config_mail_entries.keys()) - set(current_mail.keys()))
         for domain in new_domains:
-            print("[+] [Sendgrid] Creating domain %s" % domain)
+            print(color("    [+] [Sendgrid] Creating domain %s" % domain, "green"))
             self.sendgrid.new_domain(domain)
 
             current_mail[domain] = {
@@ -140,7 +141,7 @@ class Automation:
             # Checking for deleted emails
             deleted_emails = list(set(current_mail[domain]['email'].keys()) - set(current_emails))
             for email in deleted_emails:
-                print("[+] [Sendgrid] Removing email %s" % email)
+                print(color("    [+] [Sendgrid] Removing email %s" % email, "green"))
                 self.sendgrid.delete_sender(email)
 
             # Checking for new emails
@@ -148,36 +149,36 @@ class Automation:
             for email in new_emails:
                 name = config_mail_entries[domain][email]
 
-                print("[+] [Sendgrid] Creating email %s <%s>" % (name, email))
+                print(color("    [+] [Sendgrid] Creating email %s <%s>" % (name, email), "green"))
                 self.sendgrid.new_sender(name, email)
 
-        print("[+] Done")
+        print(color("[*] Done", "blue"))
         return True
 
     def clear_sendgrid(self):
 
-        print("[+] Crearing the SendGrid mail entries")
+        print(color("[*] Crearing the SendGrid mail entries", "blue"))
 
         self.sendgrid.disable_clicktracking()
 
         try:
             current_mail = self.sendgrid.get_config()
         except Exception as e:
-            print("%s: %s" % (type(e), str(e)))
-            print(e.body)
+            print(color("%s: %s" % (type(e), str(e)), "red"))
+            print(color(str(e.body), "red"))
 
 
         for domain in current_mail.keys():
-            print("[+] [Sendgrid] Removing domain %s" % domain)
+            print(color("    [*] [Sendgrid] Removing domain %s" % domain, "blue"))
             self.sendgrid.delete_domain(domain)
 
-        print("[+] Done")
+        print(color("[*] Done", "blue"))
         return True
 
 
     def update_cloudflare(self): 
 
-        print("[+] Creating the DNS entries in cloudflare")
+        print(color("[*] Creating the DNS entries in cloudflare", "blue"))
 
         self.cloudflare.set_encryption_mode(mode="full")
 
@@ -242,7 +243,7 @@ class Automation:
         # Checking for deleted dns
         deleted_dns = list(set(current_dns_config_dict.keys()) - set(config_dns_dict.keys()))
         for dns_hash in deleted_dns:
-            print("[+] [Cloudflare] Removing DNS [%s] %s => %s" % current_dns_config_dict[dns_hash])
+            print(color("    [+] [Cloudflare] Removing DNS [%s] %s => %s" % current_dns_config_dict[dns_hash], "green"))
 
             dns_info = current_dns_config_dict[dns_hash]
             if dns_info[0] == 'proxy':
@@ -253,7 +254,7 @@ class Automation:
         # Checking for new domains
         new_dns = list(set(config_dns_dict.keys()) - set(current_dns_config_dict.keys()))
         for dns_hash in new_dns:
-            print("[+] [Cloudflare] Creating DNS [%s] %s => %s" % config_dns_dict[dns_hash])
+            print(color("    [+] [Cloudflare] Creating DNS [%s] %s => %s" % config_dns_dict[dns_hash], "green"))
 
             dns_info = config_dns_dict[dns_hash]
             if dns_info[0] == 'proxy':
@@ -261,24 +262,24 @@ class Automation:
             else:
                 self.cloudflare.new_dns(dns_info[1], dns_info[2], dns_type=dns_info[0])
 
-        print("[+] Done")
+        print(color("[*] Done", "blue"))
         return True
 
     def clear_cloudflare(self): 
-        print("[+] Clearing the DNS entries in cloudflare")
+        print(color("[*] Clearing the DNS entries in cloudflare", "blue"))
 
         current_dns_config = self.cloudflare.get_dns()
         for key, info in current_dns_config.items():
-            print("[+] [Cloudflare] Removing DNS [%s] %s => %s" % (info['type'], key, info['content']))
+            print(color("    [+] [Cloudflare] Removing DNS [%s] %s => %s" % (info['type'], key, info['content']), "green"))
 
             self.cloudflare.remove_dns(key, info['content'], dns_type=info['type'])
 
-        print("[+] Done")
+        print(color("[*] Done", "blue"))
         return True
 
     def update_routing(self):
 
-        print("[+] Creating the routing")
+        print(color("[*] Creating the routing", "blue"))
 
         # Delete all routes
         self.routing.clear_routing()
@@ -301,21 +302,21 @@ class Automation:
 
         self.routing.apply()
 
-        print("[+] Done")
+        print(color("[*] Done", "blue"))
         return True
 
     def clear_routing(self):
 
-        print("[+] Clearing the routing")
+        print(color("[*] Clearing the routing", "blue"))
 
         self.routing.clear_routing()
 
-        print("[+] Done")
+        print(color("[*] Done", "blue"))
         return True
 
     def update_ansible(self):
 
-        print("[+] Apply the playbooks")
+        print(color("[*] Apply the playbooks", "blue"))
 
         playbooks = self.config.get_playbooks()
 
@@ -339,7 +340,7 @@ class Automation:
                 previous_args = json.loads(previous_execution['Execution'][playbook_hash])
 
                 if playbook['args'] == previous_args:
-                    print("[+] Skipping playbook: Mission: %s, Host: %s, Playbook: %s" % (playbook['mission'], playbook['name'], playbook['playbook']))
+                    print(color("    [*] Skipping playbook: Mission: %s, Host: %s, Playbook: %s" % (playbook['mission'], playbook['name'], playbook['playbook']), "blue"))
                     continue
 
             # Create inventory file
@@ -363,7 +364,7 @@ ansible_ssh_common_args='-o StrictHostKeyChecking=accept-new'
             )
 
             if runner.rc == 0:
-                print("[+] Playbook execution success: Mission: %s, Host: %s, Playbook: %s" % (playbook['mission'], playbook['name'], playbook['playbook']))
+                print(color("    [+] Playbook execution success: Mission: %s, Host: %s, Playbook: %s" % (playbook['mission'], playbook['name'], playbook['playbook']), "green"))
 
                 previous_execution['Execution'][playbook_hash] = json.dumps(playbook['args'])
 
@@ -371,10 +372,10 @@ ansible_ssh_common_args='-o StrictHostKeyChecking=accept-new'
                     previous_execution.write(configfile)
 
             else:
-                print("Playbook execution failed!")
-                print("STDERR:", runner.stderr.read())
+                print(color("    Playbook execution failed!", "red"))
+                print(color("    STDERR:", "red"), runner.stderr.read())
 
-        print("[+] Done")
+        print(color("[*] Done", "blue"))
         return True
 
     def destroy(self):
@@ -416,6 +417,8 @@ ansible_ssh_common_args='-o StrictHostKeyChecking=accept-new'
     """ % playbook['local_ip'])
                 f.close()
 
+                print(color("[*] Executing playbook: Mission: %s, Host: %s, Playbook: %s" % (playbook['mission'], playbook['name'], playbook['playbook']), "blue"))
+
                 # Execute the playblook
                 runner = ansible_runner.run(
                     private_data_dir="ansible",
@@ -425,7 +428,7 @@ ansible_ssh_common_args='-o StrictHostKeyChecking=accept-new'
                 )
 
                 if runner.rc == 0:
-                    print("[+] Playbook execution success: Mission: %s, Host: %s, Playbook: %s" % (playbook['mission'], playbook['name'], playbook['playbook']))
+                    print(color("[+] Playbook execution success: Mission: %s, Host: %s, Playbook: %s" % (playbook['mission'], playbook['name'], playbook['playbook']), "green"))
 
                     playbook_hash = '%s_%s_%s_%s' % (playbook['local_ip'], playbook['mission'], playbook['name'], playbook['playbook'])
                     previous_execution['Execution'][playbook_hash] = json.dumps(playbook['args'])
@@ -434,7 +437,7 @@ ansible_ssh_common_args='-o StrictHostKeyChecking=accept-new'
                         previous_execution.write(configfile)
 
                 else:
-                    print("Playbook execution failed!")
-                    print("STDERR:", runner.stderr.read())
+                    print(color("Playbook execution failed!", "red"))
+                    print(color("STDERR:", "red"), runner.stderr.read())
 
 

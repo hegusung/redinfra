@@ -4,6 +4,8 @@ from jinja2 import Environment, FileSystemLoader
 from python_terraform import *
 from python_terraform import Terraform as TF
 
+from lib.color import color
+
 TERRAFORM_PATH = "terraform"
 
 class Terraform:
@@ -90,27 +92,27 @@ class Terraform:
         tf = TF(working_dir=TERRAFORM_PATH)
 
         # Run terraform init
-        print("[+] Running terraform init...")
+        print(color("    [*] Running terraform init...", "blue"))
         init_result = tf.init()
 
         # Check if init was successful
         if init_result[0] == 0:
-            print("[+] Terraform init successful!")
+            print(color("    [+] Terraform init successful!", "green"))
         else:
-            print("[-] Error during terraform init")
-            print(init_result[1])            
+            print(color("    [-] Error during terraform init", "red"))
+            print(color("    " + str(init_result[1]), "red"))            
             return 1
 
         # Run terraform apply
-        print("[+] Running terraform apply...")
+        print(color("    [*] Running terraform apply...", "blue"))
         apply_result = tf.apply(skip_plan=True, auto_approve=True)
 
         # Check if apply was successful
         if apply_result[0] == 0:
-            print("[+] Terraform apply successful!")
+            print(color("    [+] Terraform apply successful!", "green"))
         else:
-            print("[-] Error during terraform apply")
-            print(apply_result[2])            
+            print(color("    [-] Error during terraform apply", "red"))
+            print(color("    " + str(apply_result[2]), "red"))            
             return 1
 
         return 0
@@ -119,27 +121,27 @@ class Terraform:
         tf = TF(working_dir=TERRAFORM_PATH)
 
         # Run terraform init
-        print("[+] Running terraform init...")
+        print(color("    [*] Running terraform init...", "blue"))
         init_result = tf.init()
 
         # Check if init was successful
         if init_result[0] == 0:
-            print("[+] Terraform init successful!")
+            print(color("    [+] Terraform init successful!", "green"))
         else:
-            print("[-] Error during terraform init")
-            print(init_result[1])            
+            print(color("    [-] Error during terraform init", "red"))
+            print(color("    " + str(init_result[1]), "red"))            
             return 1
 
         # Run terraform apply
-        print("[+] Running terraform destroy...")
+        print(color("    [*] Running terraform destroy...", "blue"))
         destroy_result = tf.destroy(force=IsNotFlagged, auto_approve=True)
 
         # Check if apply was successful
         if destroy_result[0] == 0:
-            print("[+] Terraform destroy successful!")
+            print(color("    [+] Terraform destroy successful!", "green"))
         else:
-            print("[-] Error during terraform apply")
-            print(destroy_result[2])            
+            print(color("    [-] Error during terraform apply", "red"))
+            print(color("    " + str(destroy_result[2]), "red"))            
             return 1
 
         return 0

@@ -4,12 +4,11 @@ import sys
 import configparser
 from colorama import Fore, Style
 
+from lib.color import color
+
 class AWS:
     def __init__(self, config, cloudflare):
         self.config = config
-
-        #self.config = configparser.ConfigParser(interpolation=None)
-        #self.config.read(os.path.join(os.path.dirname(sys.argv[0]), 'redinfra.cfg'))
 
         self.cloudflare = cloudflare
 
@@ -68,34 +67,6 @@ class AWS:
                 linked_ips.append(ip)
             else:
                 config.append([dns, ip, None])
-
-        """
-        client_tuple = self.clients[0] # Only use the first one
-        region, _, client = client_tuple
-
-        response = client.list_hosted_zones()
-        for zone in response["HostedZones"]:
-            domain = zone["Name"][:-1]
-
-            response_zone = client.list_resource_record_sets(
-                HostedZoneId=zone['Id']
-            )
-            for item in response_zone["ResourceRecordSets"]:
-                dns = item['Name']
-                dns_type = item['Type']
-
-                if not dns_type in ['A', 'AAAA']:
-                    continue
-
-                for ip in item['ResourceRecords']:
-                    ip = ip['Value']
-
-                    if ip in elastic_ips:
-                        config.append([dns, ip, elastic_ips[ip]])
-                        linked_ips.append(ip)
-                    else:
-                        config.append([dns, ip, None])
-        """
 
         instance_dict = {}
         for client_tuple in self.clients:
@@ -207,7 +178,7 @@ class AWS:
 
 
     def start_instance(self, instance_id):
-        print("> Starting instance %s" % (instance_id,))
+        print(color("    [*] Starting instance %s" % (instance_id,), "blue"))
         found = False
         for client_tuple in self.clients:
             region, client, _ = client_tuple
@@ -218,12 +189,13 @@ class AWS:
                     if instance_id == instance['InstanceId']:
                         found = True
                         client.start_instances(InstanceIds=[instance_id], DryRun=False)
+                        print(color("    [+] Instance %s started" % (instance_id,), "green"))
 
         if not found:
-            print("> Unable to start instance, not found")
+            print(color("    [-] Unable to start instance, not found", "red"))
 
     def stop_instance(self, instance_id):
-        print("> Stopping instance %s" % instance_id)
+        print(color("    [*] Stopping instance %s" % instance_id, "blue"))
         found = False
         for client_tuple in self.clients:
             region, client, _ = client_tuple
@@ -234,9 +206,10 @@ class AWS:
                     if instance_id == instance['InstanceId']:
                         found = True
                         client.stop_instances(InstanceIds=[instance_id], DryRun=False)
+                        print(color("    [+] Instance %s stopped" % instance_id, "green"))
 
         if not found:
-            print("> Unable to stop instance, not found")
+            print(color("    [-] Unable to stop instance, not found", "red"))
 
     def list_elastic_ips(self):
         print("Elastic IPs")
@@ -255,6 +228,8 @@ class AWS:
 
 
     def new_ip(self, new_ip_region):
+        print(color("    [*] Allocating new elastic IP to instance %s" % instance_id, "blue"))
+
         found = False
         for client_tuple in self.clients:
             region, client, _ = client_tuple
@@ -271,12 +246,14 @@ class AWS:
                 }
             ])
             
-            print("New Elastic IP: %s" % new_allocation["PublicIp"])
+            print(color("    [+] New elastic IP %s allocated to instance %s" % (new_allocation["PublicIp"], instance_id), "green"))
 
         if not found:
-            print("> Unable to get new elastic IP, region not found")
+            print(color("    [-] Unable to get new elastic IP, region not found", "red"))
 
     def remove_ip(self, ip):
+        print(color("    [*] Removing elastic IP %s" % ip, "blue"))
+
         found = False
         for client_tuple in self.clients:
             region, client, _ = client_tuple
@@ -296,22 +273,23 @@ class AWS:
                     if "InstanceId" in address:
                         instance = address["InstanceId"]
 
-                        print("> Dissociating from instance %s" % instance)
+                        print(color("    [+] Dissociating elastic IP from instance %s" % instance, "green"))
                         client.disassociate_address(AssociationId=association_id)
                     else:
                         instance = None
 
-                    print("> Releasing elastic IP")
+                    print(color("    [+] Releasing elastic IP", "green"))
                     client.release_address(AllocationId=allocation_id)
                 else:
                     continue
 
         if not found:
-            print("> Unable to delete IP, not found")
+            print(color("    [-] Unable to delete IP, not found", "red"))
 
 
     def renew_ip(self, ip):
-        print("> Renewing IP %s" % ip)
+        print(color("    [*] Renewing elastic IP %s" % ip, "blue"))
+
         found = False
         for client_tuple in self.clients:
             region, client, _ = client_tuple
@@ -331,12 +309,12 @@ class AWS:
                     if "InstanceId" in address:
                         instance = address["InstanceId"]
 
-                        print("> Dissociating from instance %s" % instance)
+                        print(color("    [+] Dissociating elastic IP from instance %s" % instance, "green"))
                         client.disassociate_address(AssociationId=association_id)
                     else:
                         instance = None
 
-                    print("> Getting new elastic IP")
+                    print(color("    [+] Getting new elastic IP", "green"))
                     new_allocation = client.allocate_address(Domain='vpc', TagSpecifications=[
                         {
                             "ResourceType": 'elastic-ip',
@@ -344,23 +322,23 @@ class AWS:
                         }
                     ])
 
-                    print("> Releasing old elastic IP")
+                    print(color("    [+] Releasing old elastic IP", "green"))
                     client.release_address(AllocationId=allocation_id)
 
                     if instance != None:
-                        print("> Associating new elastic IP to %s" % instance)
+                        print(color("    [+] Associating new elastic IP to %s" % instance, "green"))
                         client.associate_address(AllocationId=new_allocation['AllocationId'], InstanceId=instance)
 
-                    print("New Elastic IP: %s" % new_allocation["PublicIp"])
+                    print(color("    [+] New Elastic IP: %s" % new_allocation["PublicIp"], "green"))
 
                 else:
                     continue
 
         if not found:
-            print("> Unable to renew IP, not found")
+            print(color("[-] Unable to renew IP, not found", "red"))
 
     def associate_ip(self, ip, instance):
-        print("> Associating IP %s to %s" % (ip, instance))
+        print(color("    [*] Associating IP %s to %s" % (ip, instance), "blue"))
         found = False
         for client_tuple in self.clients:
             region, client, _ = client_tuple
@@ -375,17 +353,17 @@ class AWS:
 
                     client.associate_address(AllocationId=allocation_id, InstanceId=instance)
 
-                    print("IP %s associated to %s" % (ip, instance))
+                    print(color("    [+] IP %s associated to %s" % (ip, instance), "green"))
 
                 else:
                     continue
 
         if not found:
-            print("> Unable to associate IP, not found")
+            print(color("    [-] Unable to associate IP, not found", "red"))
 
 
     def dissociate_ip(self, ip):
-        print("> Dissociating IP %s" % ip)
+        print(color("[*] Dissociating IP %s" % ip, "blue"))
         found = False
         for client_tuple in self.clients:
             region, client, _ = client_tuple
@@ -405,14 +383,15 @@ class AWS:
                     if "InstanceId" in address:
                         instance = address["InstanceId"]
 
-                        print("> Dissociating from instance %s" % instance)
+                        print(color("    [+] Dissociating from instance %s" % instance, "green"))
                         client.disassociate_address(AssociationId=association_id)
                 else:
                     continue
 
         if not found:
-            print("> Unable to dissociate IP, not found")
+            print(color("    [-] Unable to dissociate IP, not found", "red"))
 
+    """
     def list_dns(self):
         print("DNS entries")
         client_tuple = self.clients[0] # Only use the first one
@@ -522,3 +501,4 @@ class AWS:
                 )
 
                 print("Domain %s with value %s removed (%s)" % (domain, value, dns_type))
+"""

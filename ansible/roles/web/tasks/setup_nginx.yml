@@ -30,6 +30,14 @@
     group: root
     mode: '0644'
 
+- name: Setup nginx redelk conf
+  template:
+    src: templates/redelk.conf
+    dest: /etc/nginx/conf.d/redelk.conf
+    owner: root
+    group: root
+    mode: '0644'
+
 - name: Setup nginx log conf
   template:
     src: templates/log.conf
