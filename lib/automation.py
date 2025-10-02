@@ -182,6 +182,7 @@ class Automation:
 
 
     def update_o365(self):
+        print(color("[*] Updating O365", "blue"))
 
         config = self.config.get_o365()
 
@@ -193,11 +194,21 @@ class Automation:
             tenant.create_new_domains()
             tenant.create_new_users()
 
+        print(color("[*] Done", "blue"))
         return True
 
     def clear_o365(self):
-        raise NotImplementedError("clear_o365")
+        print(color("[*] Clearing O365", "blue"))
 
+        config = self.config.get_o365()
+
+        tenants = self.o365.setup_tenants(config)
+
+        for tenant in tenants:
+            tenant.delete_old_users()
+            tenant.delete_old_domains()
+
+        print(color("[*] Done", "blue"))
         return True
 
     def update_cloudflare(self): 
@@ -319,9 +330,9 @@ class Automation:
 
         current_dns_config = self.cloudflare.get_dns()
         for key, info in current_dns_config.items():
-            print(color("    [+] [Cloudflare] Removing DNS [%s] %s => %s" % (info['type'], key, info['content']), "green"))
+            print(color("    [+] [Cloudflare] Removing DNS [%s] %s => %s" % (info[0], info[1], info[2]), "green"))
 
-            self.cloudflare.remove_dns(key, info['content'], dns_type=info['type'])
+            self.cloudflare.remove_dns(info[1], info[2], dns_type=info[0])
 
         print(color("[*] Done", "blue"))
         return True
