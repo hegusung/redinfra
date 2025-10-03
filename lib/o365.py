@@ -270,6 +270,6 @@ class Tenant:
                     yield record
 
             if tenant_name and domain_id:
-                yield {"label": "selector1._domainkey.%s" % domain["id"], "recordType": "CName", "canonicalName": "selector1-%s._domainkey.%s.w-v1.dkim.mail.microsoft" % (domain_id, tenant_name)}
-                yield {"label": "selector2._domainkey.%s" % domain["id"], "recordType": "CName", "canonicalName": "selector2-%s._domainkey.%s.w-v1.dkim.mail.microsoft" % (domain_id, tenant_name)}
+                yield {"label": "selector1._domainkey.%s" % domain["id"], "recordType": "CName", "canonicalName": "selector1-%s._domainkey.%s.d-v1.dkim.mail.microsoft" % (domain_id, tenant_name)}
+                yield {"label": "selector2._domainkey.%s" % domain["id"], "recordType": "CName", "canonicalName": "selector2-%s._domainkey.%s.d-v1.dkim.mail.microsoft" % (domain_id, tenant_name)}
 

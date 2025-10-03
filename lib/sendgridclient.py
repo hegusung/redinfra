@@ -207,25 +207,28 @@ class SendGrid:
 
         print("[+] Removing the senders related to the domain %s" % domain)
 
-        response = self.sg.client.senders.get()
-        response_json = json.loads(response.body)
+        try:
+            response = self.sg.client.senders.get()
+            response_json = json.loads(response.body)
 
-        for sender_info in response_json:
-            sender_name = sender_info['from']['name']
-            sender_email = sender_info['from']['email']
+            for sender_info in response_json:
+                sender_name = sender_info['from']['name']
+                sender_email = sender_info['from']['email']
 
-            if sender_email.endswith("@%s" % domain):
-                print("[+] Deleting sender %s <%s>" % (sender_name, sender_email))
-                sender_id = sender_info['id']
+                if sender_email.endswith("@%s" % domain):
+                    print("[+] Deleting sender %s <%s>" % (sender_name, sender_email))
+                    sender_id = sender_info['id']
 
-                try:
-                    response = self.sg.client.senders._(sender_id).delete()
-                
-                    print("[+] Sender deleted")
-                except Exception as e:
-                    print("[-] Failed to delete the sender")
+                    try:
+                        response = self.sg.client.senders._(sender_id).delete()
+                    
+                        print("[+] Sender deleted")
+                    except Exception as e:
+                        print("[-] Failed to delete the sender")
 
-        print("[+] Senders removed")
+            print("[+] Senders removed")
+        except Exception:
+            print("SENDGRID ERROR")
 
         print("[+] Removing the domain %s from SendGrid" % domain)
 
