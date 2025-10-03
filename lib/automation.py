@@ -77,8 +77,11 @@ class Automation:
     def apply_terraform(self):
         self.terraform.delete_terraform_files()
 
-        print(color("[*] Creation of new terraform files", "blue"))
+        print(color("[*] Updating terraform...", "blue"))
+        
+        print(color("    [*] Creation of new terraform files", "blue"))
         self.terraform.create_tf_files()
+        print(color("    [*] Done", "blue"))
 
         return_code = self.terraform.apply()
 
@@ -90,8 +93,9 @@ class Automation:
         self.routing.reload_config()
 
         self.update_config_instances()
-
+        
         print(color("[*] Done", "blue"))
+
         return True
 
 

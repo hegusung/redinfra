@@ -5,6 +5,8 @@ import time
 import msal
 import requests
 
+from lib.color import color
+
 class O365:
 
     def __init__(self, cloudflare):
@@ -59,7 +61,7 @@ class Tenant:
             yield user
 
     def delete_old_users(self):
-        print("[*] Deleting old O365 users...")
+        print(color("    [*] Deleting old O365 users...", "blue"))
 
         for user in self.list_users():
             if not user["userPrincipalName"] in self.users:
@@ -70,16 +72,22 @@ class Tenant:
                 )
                 
                 if len(resp.json()["value"]) == 0: # Simple user, we can delete
-                    print("[*] Deleting user %s" % user["userPrincipalName"])
+                    print(color("    [*] Deleting user %s" % user["userPrincipalName"], "blue"))
 
                     resp = requests.delete(
                         "https://graph.microsoft.com/v1.0/users/%s" % user["id"],
                         headers={"Authorization": "Bearer %s" % self.token}
                     )
-                    print(resp.status_code)
+                    if resp.status_code in [200,201]:
+                        print(color("    [+] User %s deleted" % user["userPrincipalName"], "green"))
+                    else:
+                        print(color("    [-] Failed to delete user: %s" % resp.json(), "red"))
+
+        print(color("    [*] Done", "blue"))
+
 
     def create_new_users(self):
-        print("[*] Creating new O365 users...")
+        print(color("    [*] Creating new O365 users...", "blue"))
 
         # Gathering licences
         available_licences = []
@@ -103,7 +111,7 @@ class Tenant:
 
         for user in self.users:
             if not user in current_users:
-                print("[*] Adding user %s to O365" % user)
+                print(color("    [*] Adding user %s to O365" % user, "blue"))
 
                 body = {
                   "accountEnabled": True,
@@ -122,15 +130,18 @@ class Tenant:
                     json=body
                 )
 
-                print(resp.status_code)
+                if resp.status_code in [200,201]:
+                    print(color("    [+] User %s added" % user, "green"))
+                else:
+                    print(color("    [-] Failed to add user: %s" % resp.json(), "red"))
 
-                print("[*] Adding a licence to %s" % user)
+                print(color("    [*] Adding a licence to %s" % user, "blue"))
 
                 if len(available_licences) == 0:
-                    print("[-] No more licences to user, buy more")
+                    print(color("    [-] No more licences to user, buy more", "red"))
                 else:
                     skuid = available_licences.pop()
-                    print("[*] Using license %s" % skuid)
+                    print(color("    [*] Using license %s" % skuid, "blue"))
 
                     body = {
                         "addLicenses": [{"skuId": skuid, "disabledPlans": []}],  # optionally disable plans
@@ -141,10 +152,12 @@ class Tenant:
                         headers={"Authorization": "Bearer %s" % self.token},
                         json=body
                     )
-                    if r.status_code == 200:
-                        print("[+] Successfully added license")
+                    if r.status_code in [200, 201]:
+                        print(color("    [+] Successfully added license", "green"))
                     else:
-                        print("[-] Failed to add license: %s" % r.json())
+                        print(color("    [-] Failed to add license: %s" % r.json(), "red"))
+
+        print(color("    [*] Done", "blue"))
 
     def list_domains(self):
         resp = requests.get(
@@ -155,22 +168,28 @@ class Tenant:
             yield domain
 
     def delete_old_domains(self):
-        print("[*] Deleting old O365 domains...")
+        print(color("    [*] Deleting old O365 domains...", "blue"))
 
         for domain in self.list_domains():
 
             if not domain["id"] in self.domains:
                 if domain["isInitial"] == False:
-                    print("[*] Deleting domain %s" % domain["id"])
+                    print(color("    [*] Deleting domain %s" % domain["id"], "blue"))
 
                     resp = requests.delete(
                         "https://graph.microsoft.com/v1.0/domains/%s" % domain["id"],
                         headers={"Authorization": "Bearer %s" % self.token}
                     )
-                    print(resp.status_code)
+
+                    if resp.status_code in [200, 201]:
+                        print(color("    [+] Successfully deleted the domain", "green"))
+                    else:
+                        print(color("    [-] Failed to delete the domain: %s" % resp.json(), "red"))
+
+        print(color("    [*] Done", "blue"))
 
     def create_new_domains(self):
-        print("[*] Creating new O365 domains...")
+        print(color("    [*] Creating new O365 domains...", "blue"))
 
         # Get current config from o365
         current_domains = {}
@@ -179,7 +198,7 @@ class Tenant:
 
         for domain in self.domains:
             if not domain in current_domains:
-                print("[*] Adding domain %s to O365" % domain)
+                print(color("    [*] Adding domain %s to O365" % domain, "blue"))
 
                 body = {"id": domain}
                 resp = requests.post(
@@ -188,12 +207,17 @@ class Tenant:
                     json=body
                 )
 
+                if resp.status_code in [200, 201]:
+                    print(color("    [+] Successfully deleted the domain", "green"))
+                else:
+                    print(color("    [-] Failed to delete the domain: %s" % resp.json(), "red"))
+
                 print(resp.status_code, resp.json())
 
         for domain in self.list_domains():
             # Check if domain is verified
             if domain["isVerified"] == False:
-                print("[*] Verifying domain %s in O365" % domain['id'])
+                print(color("    [*] Verifying domain %s in O365" % domain['id'], "blue"))
                 verified = False
 
                 resp = requests.get(
@@ -201,7 +225,7 @@ class Tenant:
                     headers={"Authorization": "Bearer %s" % self.token}
                 )
 
-                print("[*] Adding records in Cloudflare")
+                print(color("    [*] Adding records in Cloudflare", "blue"))
                 for record in resp.json().get('value', []):
                     if record['recordType'].upper() == "TXT":
                         self.o365.cloudflare.new_dns(record['label'], record['text'], dns_type='TXT')
@@ -210,7 +234,7 @@ class Tenant:
 
                 while verified == False:
         
-                    print("[*] Waiting for O365 verification... (can take a few minutes)")
+                    print(color("    [*] Waiting for O365 verification... (can take a few minutes)", "blue"))
                     resp = requests.post(
                         "https://graph.microsoft.com/v1.0/domains/%s/verify" % domain['id'],
                         headers={"Authorization": "Bearer %s" % self.token},
@@ -223,10 +247,10 @@ class Tenant:
                     else:
                         break
                         
-                print("[+] Domain %s is verified" % domain['id'])
+                print(color("    [+] Domain %s is verified" % domain['id'], "green"))
 
             if len(domain["supportedServices"]) == 0:
-                print("[*] Setting services for the domain %s" % domain['id'])
+                print(color("    [*] Setting services for the domain %s" % domain['id'], "blue"))
 
                 patch_body = {
                     "isDefault": False,
@@ -238,7 +262,12 @@ class Tenant:
                     json=patch_body
                 )
 
-                print(resp.status_code)
+                if resp.status_code in [200, 201]:
+                    print(color("    [+] Successfully added the services", "green"))
+                else:
+                    print(color("    [-] Failed to add services: %s" % resp.json(), "red"))
+
+        print(color("    [*] Done", "blue"))
 
     def get_dns_entries(self):
 
@@ -260,6 +289,7 @@ class Tenant:
             )
             domain_id = None
             for record in resp.json().get('value', []):
+                print(record)
 
                 # So Microsoft API sucks and doesn't provide the DKIM entries so we will try to guess it
                 # Format => CNAME    selector1._domainkey.{domain}    selector1-{domain_id}._domainkey.{tenant_name}.w-v1.dkim.mail.microsoft

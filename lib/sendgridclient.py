@@ -148,7 +148,7 @@ class SendGrid:
                 domain = sender_info['from']['email'].split('@')[-1]
                 email_config[domain]['email'][sender_info['from']['email']] = sender_info['from']['name']
         except Exception as e:
-            print("[-] SENDGRID API ERROR: get senders")
+            print(color("    [-] SENDGRID API ERROR: get senders", "red"))
 
         return email_config
 
