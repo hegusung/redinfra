@@ -1,0 +1,17 @@
+- name: Upload redelk tgz
+  synchronize:
+    src: "../files/{{ redirector_tgz }}"
+    dest: "/opt/"
+    recursive: yes
+    delete: no
+
+- name: Uncompress redelk tgz
+  shell: "tar xzvf {{ redirector_tgz }}"
+  args:
+    chdir: "/opt/"
+
+- name: Install redelk redirectors
+  shell: "./install-redir.sh {{ filebeatid }} {{ scenario_name }} {{ redelk_url }}"
+  args:
+    chdir: "/opt/redirs/"
+
