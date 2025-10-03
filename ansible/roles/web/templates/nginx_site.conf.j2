@@ -14,17 +14,25 @@ server {
     root /var/www/{{ item["site"] }};
     index index.html;
 
+    # RedELK Logging
+    set $redir_hostname "{{ item["site"] }}";
+
     # SSL Certificates
     ssl_certificate     /etc/nginx/ssl/default.crt;
     ssl_certificate_key /etc/nginx/ssl/default.key;
 
     # Logging (optional)
     access_log /var/log/nginx/geoip_debug.log geoip_debug;
-    #access_log /var/log/nginx/{{ item["site"] }}.access.log;
+    access_log /var/log/nginx/access-redelk.log redelklog;
+    access_log /var/log/nginx/{{ item["site"] }}.access.log;
     error_log  /var/log/nginx/{{ item["site"] }}.error.log;
 
 {% for location in item["locations"] %}
     location {{ location["location"] }} {
+
+{% if "backend_name" in location %}
+	set $backend_name "{{ location["backend_name"] }}";
+{% endif %}
 
 {% if "disallow" in location and "fallback_path" in location %}
 {% for disallowed_asn in location["disallow"]['ASN'] %}
