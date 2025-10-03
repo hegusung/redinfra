@@ -25,6 +25,8 @@ ansible/*
 !ansible/install_vpn.yml
 !ansible/install_web.yml
 !ansible/install_mythic.yml
+!ansible/install_redelk_redirectors.yml
+!ansible/install_redelk_c2.yml
 !ansible/files/
 ansible/files/*
 !ansible/files/.gitkeep
@@ -40,3 +42,4 @@ ansible/roles/*
 !ansible/roles/responder/
 !ansible/roles/web/
 !ansible/roles/mythic/
+!ansible/roles/redelk/
