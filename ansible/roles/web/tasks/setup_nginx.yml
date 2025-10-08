@@ -6,7 +6,7 @@
     state: present
 
 # Stop services if existing
-- name: Stop apache service if present
+- name: Stop nginx service if present
   service:
     name: nginx
     state: stopped
@@ -80,4 +80,27 @@
     name: nginx
     state: started
     enabled: yes 
+
+- name: Ensure packages present
+  apt:
+    name:
+      - certbot
+      - python3-certbot-nginx  
+    state: present
+    update_cache: true
+    
+- name: Obtain initial certificate if missing
+  shell: "certbot run --nginx
+    -d {{ item[\"site\"] }}
+    -m {{ item[\"letsencrypt_email\"] }}
+    --agree-tos --non-interactive
+    --keep-until-expiring --rsa-key-size 4096"
+  when: item.letsencrypt | default(false) | bool
+  loop: "{{ web_domains }}"
+
+- name: Restart nginx service
+  service:
+    name: nginx
+    state: restarted
+
 
