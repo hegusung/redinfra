@@ -72,18 +72,27 @@ class Terraform:
     def delete_terraform_files(self):
         folder_path = TERRAFORM_PATH
         for file in os.listdir(folder_path):
+            if file == ".gitkeep":
+                continue
+
             file_path = os.path.join(folder_path, file)
             if os.path.isfile(file_path) and file.endswith(".tf"):  # Check if it's a terraform file (not a folder)
                 os.remove(file_path)
 
         folder_path = TERRAFORM_PATH + "/inventory"
         for file in os.listdir(folder_path):
+            if file == ".gitkeep":
+                continue
+
             file_path = os.path.join(folder_path, file)
             if os.path.isfile(file_path):  # Check if it's a file (not a folder)
                 os.remove(file_path)
 
         folder_path = TERRAFORM_PATH + "/vars"
         for file in os.listdir(folder_path):
+            if file == ".gitkeep":
+                continue
+
             file_path = os.path.join(folder_path, file)
             if os.path.isfile(file_path):  # Check if it's a file (not a folder)
                 os.remove(file_path)

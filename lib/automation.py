@@ -383,6 +383,9 @@ class Automation:
         # Delete previous inventory files
         inventory_path = "ansible/inventory/"
         for file in os.listdir(inventory_path):
+            if file == ".gitkeep":
+                continue
+
             file_path = os.path.join(inventory_path, file)
             if os.path.isfile(file_path):
                 os.remove(file_path)
