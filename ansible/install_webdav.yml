@@ -1,0 +1,9 @@
+- name: Install a WebDAV server
+  hosts: host
+  gather_facts: no
+  become: yes
+  tasks:
+    - name: Install and configure WebDAV with Nginx
+      include_role:
+        name: web
+        tasks_from: setup_nginx_webdav.yml

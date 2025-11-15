@@ -1,0 +1,109 @@
+- name: Install nginx
+  apt:
+    name: 
+      - nginx
+      - libnginx-mod-http-dav-ext
+      - libnginx-mod-http-geoip2
+    state: present
+    update_cache: yes
+
+
+# Stop services if existing
+- name: Stop nginx service if present
+  service:
+    name: nginx
+    state: stopped
+  ignore_errors: yes
+
+- name: Create SSL folder
+  shell: mkdir /etc/nginx/ssl
+  ignore_errors: yes
+
+- name: Create self-signed certificate
+  shell: openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/nginx/ssl/default.key  -out /etc/nginx/ssl/default.crt  -subj "/CN=default"
+
+- name: Change protections
+  shell: chmod 600 /etc/nginx/ssl/default.* && chown root:root /etc/nginx/ssl/default.*
+
+- name: Setup nginx geoip conf
+  template:
+    src: templates/geoip.conf
+    dest: /etc/nginx/conf.d/geoip.conf
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Setup nginx redelk conf
+  template:
+    src: templates/redelk.conf
+    dest: /etc/nginx/conf.d/redelk.conf
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Setup nginx log conf
+  template:
+    src: templates/log.conf
+    dest: /etc/nginx/conf.d/log.conf
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Copy GeoIP2 Country file
+  synchronize:
+    src: "../files/GeoLite2-Country.mmdb"
+    dest: /etc/nginx/GeoLite2-Country.mmdb
+
+- name: Copy GeoIP2 ASN file
+  synchronize:
+    src: "../files/GeoLite2-ASN.mmdb"
+    dest: /etc/nginx/GeoLite2-ASN.mmdb
+
+- name: Generate nginx config files
+  template:
+    src: templates/nginx_webdav.conf.j2
+    dest: /etc/nginx/sites-available/{{ item["site"] }}.conf
+    owner: root
+    group: root
+    mode: '0644'
+  loop: "{{ web_domains }}"
+
+- name: Enable nginx site
+  shell: ln -s /etc/nginx/sites-available/{{ item["site"] }}.conf /etc/nginx/sites-enabled/{{ item["site"] }}.conf
+  loop: "{{ web_domains }}"
+  ignore_errors: yes
+
+- name: Create dir
+  shell: mkdir /var/www/{{ item["site"] }}
+  loop: "{{ web_domains }}"
+  ignore_errors: yes
+
+- name: Start and enable nginx service
+  service:
+    name: nginx
+    state: started
+    enabled: yes 
+
+- name: Ensure packages present
+  apt:
+    name:
+      - certbot
+      - python3-certbot-nginx  
+    state: present
+    update_cache: true
+    
+- name: Obtain initial certificate if missing
+  shell: "certbot run --nginx
+    -d {{ item[\"site\"] }}
+    -m {{ item[\"letsencrypt_email\"] }}
+    --agree-tos --non-interactive
+    --keep-until-expiring --rsa-key-size 4096"
+  when: item.letsencrypt | default(false) | bool
+  loop: "{{ web_domains }}"
+
+- name: Restart nginx service
+  service:
+    name: nginx
+    state: restarted
+
+
