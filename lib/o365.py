@@ -5,6 +5,8 @@ import time
 import msal
 import requests
 
+from lib.color import color
+
 class O365:
 
     def __init__(self, cloudflare):
@@ -17,6 +19,25 @@ class O365:
             tenants.append(Tenant(self, tenant_config))
 
         return tenants
+
+    def print_domains(self, config):
+        print("[+] Domains:")
+
+        for tenant in self.setup_tenants(config):
+            tenant_id = tenant.config['tenant_id']
+            for domain in tenant.list_domains():
+                print(" > %s [%s] (verified: %s) Services: %s " % (domain['id'], tenant_id, domain['isVerified'], domain['supportedServices']))
+
+    def print_emails(self, config):
+        print("[+] Emails:")
+
+        for tenant in self.setup_tenants(config):
+            tenant_id = tenant.config['tenant_id']
+            for email in tenant.list_users():
+                print(" > %s (licenced: %s)" % (email['userPrincipalName'], len(email['assignedLicenses']) > 0))
+
+
+
 
 class Tenant:
 
@@ -59,7 +80,7 @@ class Tenant:
             yield user
 
     def delete_old_users(self):
-        print("[*] Deleting old O365 users...")
+        print(color("[*] Deleting old O365 users...", "blue"))
 
         for user in self.list_users():
             if not user["userPrincipalName"] in self.users:
@@ -69,8 +90,8 @@ class Tenant:
                     headers={"Authorization": "Bearer %s" % self.token}
                 )
                 
-                if len(resp.json()["value"]) == 0: # Simple user, we can delete
-                    print("[*] Deleting user %s" % user["userPrincipalName"])
+                if not 'error' in resp.json() and len(resp.json()["value"]) == 0: # Simple user, we can delete
+                    print(color("[*] Deleting user %s" % user["userPrincipalName"], "blue"))
 
                     resp = requests.delete(
                         "https://graph.microsoft.com/v1.0/users/%s" % user["id"],
@@ -79,31 +100,27 @@ class Tenant:
                     print(resp.status_code)
 
     def create_new_users(self):
-        print("[*] Creating new O365 users...")
+        print(color("[*] Creating new O365 users...", "blue"))
 
         # Gathering licences
-        available_licences = []
+        available_licences = {}
         resp = requests.get(
             "https://graph.microsoft.com/v1.0/subscribedSkus",
             headers={"Authorization": "Bearer %s" % self.token}
         )
         for licence in resp.json().get('value', []):
-            available_licences.append(licence['skuId'])
+            consumed = licence['consumedUnits']
+            total = licence['prepaidUnits']['enabled']
+            available_licences[licence['skuId']] = total - consumed
 
         # Get current config from o365
         current_users = {}
         for user in self.list_users():
             current_users[user["userPrincipalName"]] = user
 
-            for licence in user['assignedLicenses']:
-                try:
-                    available_licences.remove(licence['skuId'])
-                except ValueError:
-                    pass
-
         for user in self.users:
             if not user in current_users:
-                print("[*] Adding user %s to O365" % user)
+                print(color("[*] Adding user %s to O365" % user, "blue"))
 
                 body = {
                   "accountEnabled": True,
@@ -122,15 +139,21 @@ class Tenant:
                     json=body
                 )
 
-                print(resp.status_code)
-
-                print("[*] Adding a licence to %s" % user)
-
-                if len(available_licences) == 0:
-                    print("[-] No more licences to user, buy more")
+                if resp.status_code == 201:
+                    print(color("[+] User added", "green"))
                 else:
-                    skuid = available_licences.pop()
-                    print("[*] Using license %s" % skuid)
+                    print(color("[-] Failed to add the user: %s" % str(resp.json()), "red"))
+
+                print("Waiting 30 seconds")
+                time.sleep(30)
+
+                print(color("[*] Adding a licence to %s" % user, "blue"))
+
+                if available_licences['f245ecc8-75af-4f8e-b61f-27d8114de5f3'] == 0:
+                    print(color("[-] No more licences to user, buy more", "red"))
+                else:
+                    skuid = 'f245ecc8-75af-4f8e-b61f-27d8114de5f3'
+                    print(color("[*] Using license %s" % skuid, "blue"))
 
                     body = {
                         "addLicenses": [{"skuId": skuid, "disabledPlans": []}],  # optionally disable plans
@@ -142,9 +165,9 @@ class Tenant:
                         json=body
                     )
                     if r.status_code == 200:
-                        print("[+] Successfully added license")
+                        print(color("[+] Successfully added license", "green"))
                     else:
-                        print("[-] Failed to add license: %s" % r.json())
+                        print(color("[-] Failed to add license: %s" % r.json(), "red"))
 
     def list_domains(self):
         resp = requests.get(
@@ -155,13 +178,13 @@ class Tenant:
             yield domain
 
     def delete_old_domains(self):
-        print("[*] Deleting old O365 domains...")
+        print(color("[*] Deleting old O365 domains...", "blue"))
 
         for domain in self.list_domains():
 
             if not domain["id"] in self.domains:
                 if domain["isInitial"] == False:
-                    print("[*] Deleting domain %s" % domain["id"])
+                    print(color("[*] Deleting domain %s" % domain["id"], "blue"))
 
                     resp = requests.delete(
                         "https://graph.microsoft.com/v1.0/domains/%s" % domain["id"],
@@ -170,7 +193,7 @@ class Tenant:
                     print(resp.status_code)
 
     def create_new_domains(self):
-        print("[*] Creating new O365 domains...")
+        print(color("[*] Creating new O365 domains...", "blue"))
 
         # Get current config from o365
         current_domains = {}
@@ -179,7 +202,7 @@ class Tenant:
 
         for domain in self.domains:
             if not domain in current_domains:
-                print("[*] Adding domain %s to O365" % domain)
+                print(color("[*] Adding domain %s to O365" % domain, "blue"))
 
                 body = {"id": domain}
                 resp = requests.post(
@@ -188,12 +211,18 @@ class Tenant:
                     json=body
                 )
 
-                print(resp.status_code, resp.json())
+                if resp.status_code == 201:
+                    print(color("[+] Domain added", "green"))
+                else:
+                    print(color("[-] Failed to add the domain: %s" % str(resp.json()), "red"))
+
+                print("Waiting 30 seconds")
+                time.sleep(30)
 
         for domain in self.list_domains():
             # Check if domain is verified
             if domain["isVerified"] == False:
-                print("[*] Verifying domain %s in O365" % domain['id'])
+                print(color("[*] Verifying domain %s in O365" % domain['id'], "blue"))
                 verified = False
 
                 resp = requests.get(
@@ -201,7 +230,7 @@ class Tenant:
                     headers={"Authorization": "Bearer %s" % self.token}
                 )
 
-                print("[*] Adding records in Cloudflare")
+                print(color("[*] Adding records in Cloudflare", "blue"))
                 for record in resp.json().get('value', []):
                     if record['recordType'].upper() == "TXT":
                         self.o365.cloudflare.new_dns(record['label'], record['text'], dns_type='TXT')
@@ -210,7 +239,7 @@ class Tenant:
 
                 while verified == False:
         
-                    print("[*] Waiting for O365 verification... (can take a few minutes)")
+                    print(color("[*] Waiting for O365 verification... (can take a few minutes)", "blue"))
                     resp = requests.post(
                         "https://graph.microsoft.com/v1.0/domains/%s/verify" % domain['id'],
                         headers={"Authorization": "Bearer %s" % self.token},
@@ -223,10 +252,14 @@ class Tenant:
                     else:
                         break
                         
-                print("[+] Domain %s is verified" % domain['id'])
+                print(color("[+] Domain %s is verified" % domain['id'], "green"))
+
+                print("Waiting 30 seconds")
+                time.sleep(30)
+
 
             if len(domain["supportedServices"]) == 0:
-                print("[*] Setting services for the domain %s" % domain['id'])
+                print(color("[*] Setting services for the domain %s" % domain['id'], "blue"))
 
                 patch_body = {
                     "isDefault": False,
@@ -238,7 +271,10 @@ class Tenant:
                     json=patch_body
                 )
 
-                print(resp.status_code)
+                if resp.status_code in [200, 201, 204]:
+                    print(color("[+] Services set", "green"))
+                else:
+                    print(color("[-] Failed to set the services: %d" % resp.status_code, "red"))
 
     def get_dns_entries(self):
 
@@ -269,7 +305,13 @@ class Tenant:
                 if record['supportedService'] in services:
                     yield record
 
-            if tenant_name and domain_id:
-                yield {"label": "selector1._domainkey.%s" % domain["id"], "recordType": "CName", "canonicalName": "selector1-%s._domainkey.%s.w-v1.dkim.mail.microsoft" % (domain_id, tenant_name)}
-                yield {"label": "selector2._domainkey.%s" % domain["id"], "recordType": "CName", "canonicalName": "selector2-%s._domainkey.%s.w-v1.dkim.mail.microsoft" % (domain_id, tenant_name)}
+            # Add a DMAK
+            yield {"label": "_dmarc.%s" % domain["id"], "recordType": "Txt", "text": "v=DMARC1; p=reject; pct=100;"}
+
+            for key, value in self.config['domains'][domain['id']]['dkim'].items():
+                yield {"label": "%s.%s" % (key, domain['id']), 'recordType': 'CName', "canonicalName": value}
+
+            #if tenant_name and domain_id:
+            #    yield {"label": "selector1._domainkey.%s" % domain["id"], "recordType": "CName", "canonicalName": "selector1-%s._domainkey.%s.w-v1.dkim.mail.microsoft" % (domain_id, tenant_name)}
+            #    yield {"label": "selector2._domainkey.%s" % domain["id"], "recordType": "CName", "canonicalName": "selector2-%s._domainkey.%s.w-v1.dkim.mail.microsoft" % (domain_id, tenant_name)}
 

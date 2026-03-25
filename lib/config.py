@@ -238,6 +238,11 @@ class Config:
                             if not email in o365[key]["domains"][domain]["emails"]:
                                 o365[key]["domains"][domain]["emails"][email] = user_info
 
+                        if 'dkim' in domain_info:
+                            o365[key]["domains"][domain]["dkim"] = domain_info["dkim"]
+                        else:
+                            o365[key]["domains"][domain]["dkim"] = {}
+
         return o365
 
     # == Terraform changes ==

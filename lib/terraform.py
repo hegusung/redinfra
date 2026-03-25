@@ -114,7 +114,7 @@ class Terraform:
 
         # Run terraform apply
         print(color("    [*] Running terraform apply...", "blue"))
-        apply_result = tf.apply(skip_plan=True, auto_approve=True)
+        apply_result = tf.apply(skip_plan=True, auto_approve=True, parallelism=2)
 
         # Check if apply was successful
         if apply_result[0] == 0:
@@ -143,7 +143,7 @@ class Terraform:
 
         # Run terraform apply
         print(color("    [*] Running terraform destroy...", "blue"))
-        destroy_result = tf.destroy(force=IsNotFlagged, auto_approve=True)
+        destroy_result = tf.destroy(force=IsNotFlagged, auto_approve=True, parallelism=2)
 
         # Check if apply was successful
         if destroy_result[0] == 0:
