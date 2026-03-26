@@ -1,9 +1,5 @@
 - name: Create the OpenVPN client certificate
-  command: /opt/openvpn-install/openvpn-install.sh
-  environment:
-    MENU_OPTION: "1"
-    CLIENT: "{{ certificate_name }}"
-    PASS: "1"
+  command: /opt/openvpn-install/openvpn-install.sh client add {{ certificate_name }}
 
 - name: Change dev tup to dev tap
   command: sed -i 's/dev tun/dev tap/' /home/ubuntu/{{ certificate_name }}.ovpn

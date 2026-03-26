@@ -5,6 +5,9 @@ import time
 import sendgrid 
 import configparser
 
+from urllib.error import HTTPError
+from python_http_client.exceptions import ForbiddenError
+
 from lib.color import color
 
 class SendGrid:
@@ -32,7 +35,9 @@ class SendGrid:
             return 0
         except HTTPError as e:
             print(color("    [-] Failed to update settings: " + str(e), "red"))
-
+            return 1
+        except ForbiddenError as e:
+            print(color("    [-] Failed to update settings: " + str(e), "red"))
             return 1
 
     def new_domain(self, domain):

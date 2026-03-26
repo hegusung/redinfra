@@ -2,8 +2,11 @@
   apt:
     name: 
       - nginx
+      - libnginx-mod-http-dav-ext
       - libnginx-mod-http-geoip2
     state: present
+    update_cache: yes
+
 
 # Stop services if existing
 - name: Stop nginx service if present
@@ -58,7 +61,7 @@
 
 - name: Generate nginx config files
   template:
-    src: templates/nginx_site.conf.j2
+    src: templates/nginx_webdav.conf.j2
     dest: /etc/nginx/sites-available/{{ item["site"] }}.conf
     owner: root
     group: root

@@ -24,6 +24,7 @@ ansible/*
 !ansible/install_router.yml
 !ansible/install_vpn.yml
 !ansible/install_web.yml
+!ansible/install_webdav.yml
 !ansible/install_mythic.yml
 !ansible/install_redelk_redirectors.yml
 !ansible/install_redelk_c2.yml

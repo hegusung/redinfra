@@ -122,6 +122,7 @@ class Automation:
         try:
             current_mail = self.sendgrid.get_config()
         except Exception as e:
+            current_mail = {}
             print(color(str(e), "red"))
             print(color(str(e.body), "red"))
 
@@ -173,6 +174,7 @@ class Automation:
         try:
             current_mail = self.sendgrid.get_config()
         except Exception as e:
+            current_mail = {}
             print(color("%s: %s" % (type(e), str(e)), "red"))
             print(color(str(e.body), "red"))
 
@@ -221,7 +223,11 @@ class Automation:
 
         self.cloudflare.set_encryption_mode(mode="full")
 
-        current_mail = self.sendgrid.get_config()
+        try:
+            current_mail = self.sendgrid.get_config()
+        except Exception as e:
+            print(color("[-] Failed to get Sendgrid mails", "red"))
+            current_mail = {}
 
         config_dns = self.config.get_dns()
         
@@ -388,6 +394,9 @@ class Automation:
         # Delete previous inventory files
         inventory_path = "ansible/inventory/"
         for file in os.listdir(inventory_path):
+            if file == ".gitkeep":
+                continue
+
             file_path = os.path.join(inventory_path, file)
             if os.path.isfile(file_path):
                 os.remove(file_path)

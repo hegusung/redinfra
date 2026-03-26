@@ -4,3 +4,4 @@ sendgrid
 ansible-runner
 python-terraform
 msal
+colorama

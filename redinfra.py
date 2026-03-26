@@ -58,6 +58,10 @@ def main():
     sg_parser.add_argument('--new-sender', nargs=2, metavar=("Name", "email"), type=str, help='Add a new sender to sendgrib', dest='sendgrid_new_sender')
     sg_parser.add_argument('--delete-sender', metavar="email", type=str, help='Delete a sender from sendgrib', dest='sendgrid_delete_sender')
 
+    o365_parser = subparsers.add_parser("o365", help="O365 listing")
+    o365_parser.add_argument('--list-domains', action='store_true', help='List O365 domains', dest='list_o365_domains')
+    o365_parser.add_argument('--list-emails', action='store_true', help='List O365 emails', dest='list_o365_emails')
+
     local_parser = subparsers.add_parser("local", help="Local actions")
     local_parser.add_argument('--show-config', action='store_true', help='Show the complete config', dest='show_config')
 
@@ -179,6 +183,17 @@ def main():
 
         if args.sendgrid_delete_sender:
             sendgrid.delete_sender(args.sendgrid_delete_sender)
+
+    elif args.command == 'o365':
+
+        o365_config = config.get_o365()
+
+        if args.list_o365_domains:
+            o365.print_domains(o365_config)
+
+        if args.list_o365_emails:
+            o365.print_emails(o365_config)
+
 
     elif args.command == 'local':
 

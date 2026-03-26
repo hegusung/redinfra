@@ -20,6 +20,25 @@ class O365:
 
         return tenants
 
+    def print_domains(self, config):
+        print("[+] Domains:")
+
+        for tenant in self.setup_tenants(config):
+            tenant_id = tenant.config['tenant_id']
+            for domain in tenant.list_domains():
+                print(" > %s [%s] (verified: %s) Services: %s " % (domain['id'], tenant_id, domain['isVerified'], domain['supportedServices']))
+
+    def print_emails(self, config):
+        print("[+] Emails:")
+
+        for tenant in self.setup_tenants(config):
+            tenant_id = tenant.config['tenant_id']
+            for email in tenant.list_users():
+                print(" > %s (licenced: %s)" % (email['userPrincipalName'], len(email['assignedLicenses']) > 0))
+
+
+
+
 class Tenant:
 
     def __init__(self, o365, config):
@@ -71,7 +90,7 @@ class Tenant:
                     headers={"Authorization": "Bearer %s" % self.token}
                 )
                 
-                if len(resp.json()["value"]) == 0: # Simple user, we can delete
+                if not 'error' in resp.json() and len(resp.json()["value"]) == 0: # Simple user, we can delete
                     print(color("    [*] Deleting user %s" % user["userPrincipalName"], "blue"))
 
                     resp = requests.delete(
@@ -90,24 +109,20 @@ class Tenant:
         print(color("    [*] Creating new O365 users...", "blue"))
 
         # Gathering licences
-        available_licences = []
+        available_licences = {}
         resp = requests.get(
             "https://graph.microsoft.com/v1.0/subscribedSkus",
             headers={"Authorization": "Bearer %s" % self.token}
         )
         for licence in resp.json().get('value', []):
-            available_licences.append(licence['skuId'])
+            consumed = licence['consumedUnits']
+            total = licence['prepaidUnits']['enabled']
+            available_licences[licence['skuId']] = total - consumed
 
         # Get current config from o365
         current_users = {}
         for user in self.list_users():
             current_users[user["userPrincipalName"]] = user
-
-            for licence in user['assignedLicenses']:
-                try:
-                    available_licences.remove(licence['skuId'])
-                except ValueError:
-                    pass
 
         for user in self.users:
             if not user in current_users:
@@ -135,12 +150,15 @@ class Tenant:
                 else:
                     print(color("    [-] Failed to add user: %s" % resp.json(), "red"))
 
+                print("Waiting 30 seconds")
+                time.sleep(30)
+
                 print(color("    [*] Adding a licence to %s" % user, "blue"))
 
-                if len(available_licences) == 0:
+                if available_licences['f245ecc8-75af-4f8e-b61f-27d8114de5f3'] == 0:
                     print(color("    [-] No more licences to user, buy more", "red"))
                 else:
-                    skuid = available_licences.pop()
+                    skuid = 'f245ecc8-75af-4f8e-b61f-27d8114de5f3'
                     print(color("    [*] Using license %s" % skuid, "blue"))
 
                     body = {
@@ -152,6 +170,7 @@ class Tenant:
                         headers={"Authorization": "Bearer %s" % self.token},
                         json=body
                     )
+
                     if r.status_code in [200, 201, 204]:
                         print(color("    [+] Successfully added license", "green"))
                     else:
@@ -212,7 +231,8 @@ class Tenant:
                 else:
                     print(color("    [-] Failed to add the domain: %s" % resp.json(), "red"))
 
-                print(resp.status_code, resp.json())
+                print("Waiting 30 seconds")
+                time.sleep(30)
 
         for domain in self.list_domains():
             # Check if domain is verified
@@ -248,6 +268,9 @@ class Tenant:
                         break
                         
                 print(color("    [+] Domain %s is verified" % domain['id'], "green"))
+
+                print("Waiting 30 seconds")
+                time.sleep(30)
 
             if len(domain["supportedServices"]) == 0:
                 print(color("    [*] Setting services for the domain %s" % domain['id'], "blue"))
