@@ -78,7 +78,7 @@ class Tenant:
                         "https://graph.microsoft.com/v1.0/users/%s" % user["id"],
                         headers={"Authorization": "Bearer %s" % self.token}
                     )
-                    if resp.status_code in [200,201]:
+                    if resp.status_code in [200,201, 204]:
                         print(color("    [+] User %s deleted" % user["userPrincipalName"], "green"))
                     else:
                         print(color("    [-] Failed to delete user: %s" % resp.json(), "red"))
@@ -130,7 +130,7 @@ class Tenant:
                     json=body
                 )
 
-                if resp.status_code in [200,201]:
+                if resp.status_code in [200,201,204]:
                     print(color("    [+] User %s added" % user, "green"))
                 else:
                     print(color("    [-] Failed to add user: %s" % resp.json(), "red"))
@@ -152,7 +152,7 @@ class Tenant:
                         headers={"Authorization": "Bearer %s" % self.token},
                         json=body
                     )
-                    if r.status_code in [200, 201]:
+                    if r.status_code in [200, 201, 204]:
                         print(color("    [+] Successfully added license", "green"))
                     else:
                         print(color("    [-] Failed to add license: %s" % r.json(), "red"))
@@ -181,7 +181,7 @@ class Tenant:
                         headers={"Authorization": "Bearer %s" % self.token}
                     )
 
-                    if resp.status_code in [200, 201]:
+                    if resp.status_code in [200, 201, 204]:
                         print(color("    [+] Successfully deleted the domain", "green"))
                     else:
                         print(color("    [-] Failed to delete the domain: %s" % resp.json(), "red"))
@@ -207,10 +207,10 @@ class Tenant:
                     json=body
                 )
 
-                if resp.status_code in [200, 201]:
-                    print(color("    [+] Successfully deleted the domain", "green"))
+                if resp.status_code in [200, 201, 204]:
+                    print(color("    [+] Successfully added the domain", "green"))
                 else:
-                    print(color("    [-] Failed to delete the domain: %s" % resp.json(), "red"))
+                    print(color("    [-] Failed to add the domain: %s" % resp.json(), "red"))
 
                 print(resp.status_code, resp.json())
 
@@ -262,10 +262,10 @@ class Tenant:
                     json=patch_body
                 )
 
-                if resp.status_code in [200, 201]:
+                if resp.status_code in [200, 201, 204]:
                     print(color("    [+] Successfully added the services", "green"))
                 else:
-                    print(color("    [-] Failed to add services: %s" % resp.json(), "red"))
+                    print(color("    [-] Failed to add services: %d" % resp.status_code, "red"))
 
         print(color("    [*] Done", "blue"))
 
@@ -289,8 +289,6 @@ class Tenant:
             )
             domain_id = None
             for record in resp.json().get('value', []):
-                print(record)
-
                 # So Microsoft API sucks and doesn't provide the DKIM entries so we will try to guess it
                 # Format => CNAME    selector1._domainkey.{domain}    selector1-{domain_id}._domainkey.{tenant_name}.w-v1.dkim.mail.microsoft
                 if 'mailExchange' in record and record['mailExchange'].endswith(".mail.protection.outlook.com"):
@@ -299,7 +297,9 @@ class Tenant:
                 if record['supportedService'] in services:
                     yield record
 
-            if tenant_name and domain_id:
-                yield {"label": "selector1._domainkey.%s" % domain["id"], "recordType": "CName", "canonicalName": "selector1-%s._domainkey.%s.d-v1.dkim.mail.microsoft" % (domain_id, tenant_name)}
-                yield {"label": "selector2._domainkey.%s" % domain["id"], "recordType": "CName", "canonicalName": "selector2-%s._domainkey.%s.d-v1.dkim.mail.microsoft" % (domain_id, tenant_name)}
+            # Add a DMARK
+            yield {"label": "_dmarc.%s" % domain["id"], "recordType": "Txt", "text": "v=DMARC1; p=reject; pct=100;"}
+
+            for key, value in self.config['domains'][domain['id']]['dkim'].items():
+                yield {"label": "%s.%s" % (key, domain["id"]), "recordType": "CName", "canonicalName": value}
 

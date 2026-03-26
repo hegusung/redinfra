@@ -19,6 +19,10 @@
     state: started
     enabled: yes 
 
+- name: Pause for 30 seconds to build app cache
+  ansible.builtin.pause:
+    seconds: 30
+
 - name: Check OpenVPN connection
   shell: ip addr show tap0
   register: openvpn_ip_info

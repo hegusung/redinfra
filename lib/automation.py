@@ -243,22 +243,23 @@ class Automation:
         config_dns_dict = {}
         for type, type_dns_list in config_dns.items():
             for info in type_dns_list:
-                if type == 'A':
-                    instance_name = "Node_%s_%s" % (info[1], info[2])
+                if len(info) == 3:
+                    if type == 'A':
+                            instance_name = "Node_%s_%s" % (info[1], info[2])
 
-                    if instance_name in instance_dict:
-                        for ip in instance_dict[instance_name]:
-                            dns_hash = "A_%s_%s" % (info[0], ip)
+                            if instance_name in instance_dict:
+                                for ip in instance_dict[instance_name]:
+                                    dns_hash = "A_%s_%s" % (info[0], ip)
 
-                            config_dns_dict[dns_hash] = ('A', info[0], ip)
-                elif type == 'proxy':
-                    instance_name = "Node_%s_%s" % (info[1], info[2])
+                                    config_dns_dict[dns_hash] = ('A', info[0], ip)
+                    elif type == 'proxy':
+                        instance_name = "Node_%s_%s" % (info[1], info[2])
 
-                    if instance_name in instance_dict:
-                        for ip in instance_dict[instance_name]:
-                            dns_hash = "proxy_%s_%s" % (info[0], ip)
+                        if instance_name in instance_dict:
+                            for ip in instance_dict[instance_name]:
+                                dns_hash = "proxy_%s_%s" % (info[0], ip)
 
-                            config_dns_dict[dns_hash] = ('proxy', info[0], ip)
+                                config_dns_dict[dns_hash] = ('proxy', info[0], ip)
                 else:
                     if type == "MX":
                         dns_hash = "%s_%s_%s" % (type, info[0], info[1])
