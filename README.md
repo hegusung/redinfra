@@ -3,8 +3,6 @@
 Automated red team infrastructure deployment and management.  
 Provisions AWS instances via Terraform, configures DNS (Cloudflare), mail (SendGrid), O365 tenants, VPN routing, and runs Ansible playbooks — all driven by YAML mission files.
 
-> This README covers the [`automation`](https://github.com/hegusung/redinfra/tree/automation) branch.
-
 ---
 
 ## Features
