@@ -1,0 +1,86 @@
+server {
+    listen 80;
+    server_name {{ item["site"] }};
+
+    # Optional: force HTTPS
+    return 301 https://$host$request_uri;
+}
+
+# HTTPS server block
+server {
+    listen 443 ssl;
+    server_name {{ item["site"] }};
+
+    root /var/www/{{ item["site"] }};
+    index index.html;
+
+    # RedELK Logging
+    set $redir_hostname "{{ item["site"] }}";
+
+    # SSL Certificates
+    ssl_certificate     /etc/nginx/ssl/default.crt;
+    ssl_certificate_key /etc/nginx/ssl/default.key;
+
+    # Logging (optional)
+    access_log /var/log/nginx/geoip_debug.log geoip_debug;
+    access_log /var/log/nginx/access-redelk.log redelklog;
+    access_log /var/log/nginx/{{ item["site"] }}.access.log;
+    error_log  /var/log/nginx/{{ item["site"] }}.error.log;
+
+{% for location in item["locations"] %}
+    location {{ location["location"] }} {
+
+{% if "backend_name" in location %}
+	set $backend_name "{{ location["backend_name"] }}";
+{% endif %}
+
+{% if "disallow" in location and "fallback_path" in location %}
+{% for disallowed_asn in location["disallow"]['ASN'] %}
+	# Disallowed ASNs
+	if ($geoip2_asn_org ~* "{{ disallowed_asn }}") {
+            return 302 {{ location["fallback_path"] }};
+        }
+
+{% endfor %}
+
+
+{% for disallowed_country in location["disallow"]['country'] %}
+	# Disallowed Countries
+	if ($geoip2_asn_org ~* "{{ disallowed_country }}") {
+            return 302 {{ location["fallback_path"] }};
+        }
+
+{% endfor %}
+{% endif %}
+
+
+{% if "allow" in location and "fallback_path" in location %}
+
+{% set allowed_countries = location["allow"]['country'] | join('|') %}
+{% if allowed_countries %}
+	# Allowed Countries
+	if ($geoip2_country_code !~ "^({{ allowed_countries }})$") {
+    	    return 302 {{ location["fallback_path"] }};
+	}
+{% endif %}
+
+{% set allowed_asn = location["allow"]['ASN'] | join('|') %}
+{% if allowed_asn %}
+	# Allowed ASN
+	if ($geoip2_asn_org !~ "{{ allowed_asn }}") {
+	    return 302 {{ location["fallback_path"] }};
+	}
+{% endif %}
+
+{% endif %}
+
+{% if "proxy" in location %}
+	proxy_pass {{ location["proxy"] }};
+{% else %}
+        try_files $uri $uri/ =404;
+{% endif %}
+    }
+
+{% endfor %}
+
+}

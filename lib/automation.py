@@ -1,0 +1,520 @@
+import os
+import traceback
+import json
+import configparser
+import os.path
+import ansible_runner
+
+from lib.terraform import Terraform
+from lib.color import color
+
+ANSIBLE_FILE = "ansible.cfg"
+
+class Automation:
+
+    def __init__(self, config, aws, cloudflare, sendgrid, o365, routing):
+        self.config = config
+        self.aws = aws
+        self.cloudflare = cloudflare
+        self.sendgrid = sendgrid
+        self.o365 = o365
+        self.routing = routing
+        
+        self.terraform = Terraform(config)
+
+    def install_redinfra(self):
+        runner = ansible_runner.run(
+            private_data_dir="ansible",
+            playbook="install_router.yml"
+        )
+
+        if runner.rc == 0:
+            print(color("[+] RedInfra server packages installed", "green"))
+        else:
+            print(color("Playbook execution failed!", "red"))
+            print(color("STDERR:" + str(runner.stderr.read()), "red"))
+
+
+    def apply(self):
+
+        if not self.apply_terraform():
+            return
+
+        if not self.update_sendgrid():
+            return
+
+        if not self.update_o365():
+            return
+
+        if not self.update_cloudflare():
+            return
+
+        if not self.update_routing():
+            return
+
+        if not self.update_ansible():
+            return
+
+
+    def delete_terraform(self):
+
+        print(color("[*] Deletion of old terraform files", "blue"))
+
+        return_code = self.terraform.destroy()
+
+        if return_code != 0:
+            print(color("[-] ERROR", "red"))
+            return False
+
+        self.terraform.delete_terraform_files()
+
+        # Config changed lets reload it
+        self.routing.reload_config()
+
+        print(color("[*] Done", "blue"))
+        return True
+
+    def apply_terraform(self):
+        self.terraform.delete_terraform_files()
+
+        print(color("[*] Updating terraform...", "blue"))
+        
+        print(color("    [*] Creation of new terraform files", "blue"))
+        self.terraform.create_tf_files()
+        print(color("    [*] Done", "blue"))
+
+        return_code = self.terraform.apply()
+
+        if return_code != 0:
+            print(color("[-] ERROR", "red"))
+            return False
+
+        # Config changed lets reload it
+        self.routing.reload_config()
+
+        self.update_config_instances()
+        
+        print(color("[*] Done", "blue"))
+
+        return True
+
+
+    def update_config_instances(self):
+
+        print(color("[*] Removing deleted instances from the config", "blue"))
+        aws_instances = [item[0] for item in self.aws._list_aws() if item[1].startswith('Node_') and item[2] != 'terminated'] 
+
+        config_ids = self.routing._get_config_instance_ids()
+
+        for deleted_id in list(set(config_ids) - set(aws_instances)):
+            print(color("    [+] Removing instance %s from the config" % deleted_id, "green"))
+            self.routing.remove_vpn_ip(deleted_id)
+
+        print(color("[*] Done", "blue"))
+        return True
+
+    def update_sendgrid(self):
+
+        print(color("[*] Creating the SendGrid mail entries", "blue"))
+
+        config_mail_entries = self.config.get_mail_entries()
+
+        try:
+            current_mail = self.sendgrid.get_config()
+        except Exception as e:
+            current_mail = {}
+            print(color(str(e), "red"))
+            print(color(str(e.body), "red"))
+
+        # Checking for deleted domains
+        deleted_domains = list(set(current_mail.keys()) - set(config_mail_entries.keys()))
+        for domain in deleted_domains:
+            print(color("    [+] [Sendgrid] Removing domain %s" % domain, "green"))
+            self.sendgrid.delete_domain(domain)
+
+        # Checking for new domains
+        new_domains = list(set(config_mail_entries.keys()) - set(current_mail.keys()))
+        for domain in new_domains:
+            print(color("    [+] [Sendgrid] Creating domain %s" % domain, "green"))
+            self.sendgrid.new_domain(domain)
+
+            current_mail[domain] = {
+                'email': {},
+            }
+
+        for domain in current_mail:
+            if domain in config_mail_entries:
+                current_emails = config_mail_entries[domain].keys()
+            else:
+                current_emails = []
+
+            # Checking for deleted emails
+            deleted_emails = list(set(current_mail[domain]['email'].keys()) - set(current_emails))
+            for email in deleted_emails:
+                print(color("    [+] [Sendgrid] Removing email %s" % email, "green"))
+                self.sendgrid.delete_sender(email)
+
+            # Checking for new emails
+            new_emails = list(set(current_emails) - set(current_mail[domain]['email'].keys()))
+            for email in new_emails:
+                name = config_mail_entries[domain][email]
+
+                print(color("    [+] [Sendgrid] Creating email %s <%s>" % (name, email), "green"))
+                self.sendgrid.new_sender(name, email)
+
+        print(color("[*] Done", "blue"))
+        return True
+
+    def clear_sendgrid(self):
+
+        print(color("[*] Crearing the SendGrid mail entries", "blue"))
+
+        self.sendgrid.disable_clicktracking()
+
+        try:
+            current_mail = self.sendgrid.get_config()
+        except Exception as e:
+            current_mail = {}
+            print(color("%s: %s" % (type(e), str(e)), "red"))
+            print(color(str(e.body), "red"))
+
+
+        for domain in current_mail.keys():
+            print(color("    [*] [Sendgrid] Removing domain %s" % domain, "blue"))
+            self.sendgrid.delete_domain(domain)
+
+        print(color("[*] Done", "blue"))
+        return True
+
+
+    def update_o365(self):
+        print(color("[*] Updating O365", "blue"))
+
+        config = self.config.get_o365()
+
+        tenants = self.o365.setup_tenants(config)
+
+        for tenant in tenants:
+            tenant.delete_old_users()
+            tenant.delete_old_domains()
+            tenant.create_new_domains()
+            tenant.create_new_users()
+
+        print(color("[*] Done", "blue"))
+        return True
+
+    def clear_o365(self):
+        print(color("[*] Clearing O365", "blue"))
+
+        config = self.config.get_o365()
+
+        tenants = self.o365.setup_tenants(config)
+
+        for tenant in tenants:
+            tenant.delete_old_users()
+            tenant.delete_old_domains()
+
+        print(color("[*] Done", "blue"))
+        return True
+
+    def update_cloudflare(self): 
+
+        print(color("[*] Creating the DNS entries in cloudflare", "blue"))
+
+        self.cloudflare.set_encryption_mode(mode="full")
+
+        try:
+            current_mail = self.sendgrid.get_config()
+        except Exception as e:
+            print(color("[-] Failed to get Sendgrid mails", "red"))
+            current_mail = {}
+
+        config_dns = self.config.get_dns()
+        
+        config_o365 = self.config.get_o365()
+        tenants = self.o365.setup_tenants(config_o365)
+
+        aws_instances = self.aws._list_aws() 
+
+        instance_dict = {}
+        for instance in aws_instances:
+            # Ignore terminated instances
+            if instance[2] == 'terminated':
+                continue
+
+            node_name = instance[1] 
+
+            instance_dict[node_name] = instance[3] 
+
+        config_dns_dict = {}
+        for type, type_dns_list in config_dns.items():
+            for info in type_dns_list:
+                if len(info) == 3:
+                    if type == 'A':
+                            instance_name = "Node_%s_%s" % (info[1], info[2])
+
+                            if instance_name in instance_dict:
+                                for ip in instance_dict[instance_name]:
+                                    dns_hash = "A_%s_%s" % (info[0], ip)
+
+                                    config_dns_dict[dns_hash] = ('A', info[0], ip)
+                    elif type == 'proxy':
+                        instance_name = "Node_%s_%s" % (info[1], info[2])
+
+                        if instance_name in instance_dict:
+                            for ip in instance_dict[instance_name]:
+                                dns_hash = "proxy_%s_%s" % (info[0], ip)
+
+                                config_dns_dict[dns_hash] = ('proxy', info[0], ip)
+                else:
+                    if type == "MX":
+                        dns_hash = "%s_%s_%s" % (type, info[0], info[1])
+                        config_dns_dict[dns_hash] = (type, info[0], info[1], {'priority': 10})
+                    elif type == "TXT":
+                        if not info[1].startswith('"'):
+                            content = "\"%s\"" % info[1]
+                        else:
+                            content = info[1]
+                        dns_hash = "%s_%s_%s" % (type, info[0], content)
+                        config_dns_dict[dns_hash] = (type, info[0], content)
+                    else:
+                        dns_hash = "%s_%s_%s" % (type, info[0], info[1])
+                        config_dns_dict[dns_hash] = (type, info[0], info[1])
+
+        # Mail entries (Sendgrid)
+        for _, data in current_mail.items():
+            for entry in data['dns']:
+                dns_hash = "%s_%s_%s" % (entry['type'].upper(), entry['key'], entry['value'])
+                config_dns_dict[dns_hash] = (entry['type'], entry['key'], entry['value'])
+
+        # O365 config
+        for tenant in tenants:
+            for entry in tenant.get_dns_entries():
+                if entry['recordType'] == "Mx":
+                    dns_hash = "MX_%s_%s" % (entry["label"], entry['mailExchange'])
+                    config_dns_dict[dns_hash] = ("MX", entry['label'], entry['mailExchange'], {'priority': entry['preference']})
+                elif entry['recordType'] == "CName":
+                    dns_hash = "CNAME_%s_%s" % (entry["label"], entry['canonicalName'])
+                    config_dns_dict[dns_hash] = ("CNAME", entry['label'], entry['canonicalName'])
+                elif entry['recordType'] == "Txt":
+                    dns_hash = "TXT_%s_\"%s\"" % (entry["label"], entry['text'])
+                    config_dns_dict[dns_hash] = ("TXT", entry['label'], "\"%s\"" % entry['text'])
+                elif entry['recordType'] == "Srv":
+                    dns_hash = "SRV_%s_%d %d %s" % (entry["label"][len(entry['service']) + len(entry['protocol']) + 2:], entry['weight'], entry['port'], entry['nameTarget'])
+                    config_dns_dict[dns_hash] = ("SRV", entry['label'], entry['nameTarget'], {'service': entry['service'], 'protocol': entry['protocol'], 'priority': entry['priority'], 'weight': entry['weight'], 'port': entry['port']})
+                else:
+                    raise NotImplementedError("O365 DNS entry: %s" % entry)
+
+
+        current_dns_config_dict = self.cloudflare.get_dns()
+
+        # Checking for deleted dns
+        deleted_dns = list(set(current_dns_config_dict.keys()) - set(config_dns_dict.keys()))
+        for dns_hash in deleted_dns:
+            print(color("    [+] [Cloudflare] Removing DNS [%s] %s => %s" % current_dns_config_dict[dns_hash][:3], "green"))
+
+            dns_info = current_dns_config_dict[dns_hash]
+            if dns_info[0] == 'proxy':
+                self.cloudflare.remove_dns(dns_info[1], dns_info[2], dns_type='A')
+            else:
+                self.cloudflare.remove_dns(dns_info[1], dns_info[2], dns_type=dns_info[0])
+
+        # Checking for new domains
+        new_dns = list(set(config_dns_dict.keys()) - set(current_dns_config_dict.keys()))
+        for dns_hash in new_dns:
+            print(color("    [+] [Cloudflare] Creating DNS [%s] %s => %s" % config_dns_dict[dns_hash][:3], "green"))
+
+            dns_info = config_dns_dict[dns_hash]
+            if dns_info[0] == 'proxy':
+                self.cloudflare.new_dns(dns_info[1], dns_info[2], dns_type='A', proxied=True)
+            else:
+                if len(dns_info) == 3:
+                    self.cloudflare.new_dns(dns_info[1], dns_info[2], dns_type=dns_info[0])
+                else:
+                    self.cloudflare.new_dns(dns_info[1], dns_info[2], dns_type=dns_info[0], **dns_info[3])
+
+        print(color("[*] Done", "blue"))
+        return True
+
+    def clear_cloudflare(self): 
+        print(color("[*] Clearing the DNS entries in cloudflare", "blue"))
+
+        current_dns_config = self.cloudflare.get_dns()
+        for key, info in current_dns_config.items():
+            print(color("    [+] [Cloudflare] Removing DNS [%s] %s => %s" % (info[0], info[1], info[2]), "green"))
+
+            self.cloudflare.remove_dns(info[1], info[2], dns_type=info[0])
+
+        print(color("[*] Done", "blue"))
+        return True
+
+    def update_routing(self):
+
+        print(color("[*] Creating the routing", "blue"))
+
+        # Delete all routes
+        self.routing.clear_routing()
+
+        routing_config = self.config.get_routing()
+        
+        aws_instances = self.aws._list_aws() 
+
+        instance_dict = {}
+        for instance in aws_instances:
+            if instance[2] == 'terminated':
+                continue
+
+            node_name = instance[1] 
+
+            instance_dict[node_name] = instance[0] 
+
+        for routing_info in routing_config:
+            self.routing.set_routing(instance_dict[routing_info['node_name']], routing_info['local_ip'], ','.join([str(port) for port in routing_info['ports']]))
+
+        self.routing.apply()
+
+        print(color("[*] Done", "blue"))
+        return True
+
+    def clear_routing(self):
+
+        print(color("[*] Clearing the routing", "blue"))
+
+        self.routing.clear_routing()
+
+        print(color("[*] Done", "blue"))
+        return True
+
+    def update_ansible(self):
+
+        print(color("[*] Apply the playbooks", "blue"))
+
+        playbooks = self.config.get_playbooks()
+
+        # Delete previous inventory files
+        inventory_path = "ansible/inventory/"
+        for file in os.listdir(inventory_path):
+            if file == ".gitkeep":
+                continue
+
+            file_path = os.path.join(inventory_path, file)
+            if os.path.isfile(file_path):
+                os.remove(file_path)
+
+        previous_execution = configparser.ConfigParser()
+        previous_execution.read(ANSIBLE_FILE)
+
+        if not 'Execution' in previous_execution:
+            previous_execution['Execution'] = {}
+
+        for playbook in playbooks:
+            playbook_hash = '%s_%s_%s_%s' % (playbook['local_ip'], playbook['mission'], playbook['name'], playbook['playbook'])
+
+            if playbook_hash in previous_execution['Execution']:
+                previous_args = json.loads(previous_execution['Execution'][playbook_hash])
+
+                if playbook['args'] == previous_args:
+                    print(color("    [*] Skipping playbook: Mission: %s, Host: %s, Playbook: %s" % (playbook['mission'], playbook['name'], playbook['playbook']), "blue"))
+                    continue
+
+            # Create inventory file
+            inventory_file = "inventory_%s_%s" % (playbook['mission'], playbook['name'])
+            f = open(inventory_path + inventory_file, 'w')
+            f.write("""
+[all:vars]
+ansible_ssh_common_args='-o StrictHostKeyChecking=accept-new'
+
+[host]
+%s ansible_ssh_user=root ansible_ssh_private_key_file=../files/ansible
+""" % playbook['local_ip'])
+            f.close()
+
+            # Execute the playblook
+            runner = ansible_runner.run(
+                private_data_dir="ansible",
+                playbook=playbook['playbook'],
+                extravars=playbook['args'],
+                inventory=inventory_file,
+            )
+
+            if runner.rc == 0:
+                print(color("    [+] Playbook execution success: Mission: %s, Host: %s, Playbook: %s" % (playbook['mission'], playbook['name'], playbook['playbook']), "green"))
+
+                previous_execution['Execution'][playbook_hash] = json.dumps(playbook['args'])
+
+                with open(ANSIBLE_FILE, "w") as configfile:
+                    previous_execution.write(configfile)
+
+            else:
+                print(color("    Playbook execution failed!", "red"))
+                print(color("    STDERR:", "red"), runner.stderr.read())
+
+        print(color("[*] Done", "blue"))
+        return True
+
+    def destroy(self):
+        if not self.delete_terraform():
+            return
+
+        if not self.clear_sendgrid():
+            return
+
+        if not self.clear_o365():
+            return
+
+        if not self.clear_cloudflare():
+            return
+
+        if not self.clear_routing():
+            return
+
+    def execute_playbooks(self, mission, server):
+        
+        playbooks = self.config.get_playbooks()
+
+        previous_execution = configparser.ConfigParser()
+        previous_execution.read(ANSIBLE_FILE)
+
+        if not 'Execution' in previous_execution:
+            previous_execution['Execution'] = {}
+
+
+        inventory_path = "ansible/inventory/"
+        for playbook in playbooks:
+            if playbook['mission'] == mission and playbook['name'] == server:
+                # Create inventory file
+                inventory_file = "inventory_%s_%s" % (playbook['mission'], playbook['name'])
+                f = open(inventory_path + inventory_file, 'w')
+                f.write("""
+    [all:vars]
+    ansible_ssh_common_args='-o StrictHostKeyChecking=accept-new'
+
+    [host]
+    %s ansible_ssh_user=root ansible_ssh_private_key_file=../files/ansible
+    """ % playbook['local_ip'])
+                f.close()
+
+                print(color("[*] Executing playbook: Mission: %s, Host: %s, Playbook: %s" % (playbook['mission'], playbook['name'], playbook['playbook']), "blue"))
+
+                # Execute the playblook
+                runner = ansible_runner.run(
+                    private_data_dir="ansible",
+                    playbook=playbook['playbook'],
+                    extravars=playbook['args'],
+                    inventory=inventory_file,
+                )
+
+                if runner.rc == 0:
+                    print(color("[+] Playbook execution success: Mission: %s, Host: %s, Playbook: %s" % (playbook['mission'], playbook['name'], playbook['playbook']), "green"))
+
+                    playbook_hash = '%s_%s_%s_%s' % (playbook['local_ip'], playbook['mission'], playbook['name'], playbook['playbook'])
+                    previous_execution['Execution'][playbook_hash] = json.dumps(playbook['args'])
+
+                    with open(ANSIBLE_FILE, "w") as configfile:
+                        previous_execution.write(configfile)
+
+                else:
+                    print(color("Playbook execution failed!", "red"))
+                    print(color("STDERR:", "red"), runner.stderr.read())
+
+

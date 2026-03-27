@@ -1,0 +1,15 @@
+- name: Create the OpenVPN client certificate
+  command: /opt/openvpn-install/openvpn-install.sh client add {{ certificate_name }}
+
+- name: Change dev tup to dev tap
+  command: sed -i 's/dev tun/dev tap/' /home/ubuntu/{{ certificate_name }}.ovpn
+
+- name: Change UDP to TCP
+  command: sed -i 's/proto udp/proto tcp/' /home/ubuntu/{{ certificate_name }}.ovpn
+
+- name: Download file from EC2 to local host
+  fetch:
+    src: /home/ubuntu/{{ certificate_name }}.ovpn
+    dest: ./files/  
+    flat: yes  # Prevent Ansible from creating a directory structure
+

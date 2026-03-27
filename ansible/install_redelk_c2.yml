@@ -1,0 +1,9 @@
+- name: Install the RedELK C2 clients
+  hosts: host
+  gather_facts: no
+  become: yes
+  tasks:
+    - name: Install and configure RedELK C2
+      include_role:
+        name: redelk
+        tasks_from: setup_redelk_c2.yml

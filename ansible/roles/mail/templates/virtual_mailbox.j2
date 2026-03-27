@@ -1,0 +1,5 @@
+{% for domain_info in domains %}
+{% for user in domain_info.users %}
+{{ user.mail }}@{{ domain_info.domain }}   {{ domain_info.domain }}/{{ user.mail }}/
+{% endfor %}
+{% endfor %}

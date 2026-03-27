@@ -1,0 +1,69 @@
+provider "aws" {
+  alias  = "{{ region }}"
+  region = "{{ region }}"
+}
+
+resource "aws_key_pair" "ssh_key_{{ region }}" {
+  key_name   = "Ansible_Node"
+  public_key = file("../files/ansible.pub") # Replace with your public SSH key
+
+  provider = aws.{{ region }}
+}
+
+resource "aws_vpc" "main_vpc_{{ region }}" {
+  cidr_block           = "10.0.0.0/16"
+  enable_dns_support   = true
+  enable_dns_hostnames = true
+
+  tags = {
+    Name = "RedInfraVPC"
+  }
+
+  provider = aws.{{ region }}
+}
+
+resource "aws_subnet" "main_subnet_{{ region }}" {
+  vpc_id                  = aws_vpc.main_vpc_{{ region }}.id
+  cidr_block              = "10.0.1.0/24"
+  map_public_ip_on_launch = true
+
+  tags = {
+    Name = "RedInfraSubnet"
+  }
+
+  provider = aws.{{ region }}
+}
+
+resource "aws_internet_gateway" "main_igw_{{ region }}" {
+  vpc_id = aws_vpc.main_vpc_{{ region }}.id
+
+
+  tags = {
+    Name = "RedInfraGateway"
+  }
+
+  provider = aws.{{ region }}
+}
+
+resource "aws_route_table" "main_route_table_{{ region }}" {
+  vpc_id = aws_vpc.main_vpc_{{ region }}.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.main_igw_{{ region }}.id
+  }
+
+  tags = {
+    Name = "RedInfraRouteTable"
+  }
+
+  provider = aws.{{ region }}
+}
+
+resource "aws_route_table_association" "subnet_association_{{ region }}" {
+  subnet_id      = aws_subnet.main_subnet_{{ region }}.id
+  route_table_id = aws_route_table.main_route_table_{{ region }}.id
+
+  provider = aws.{{ region }}
+}
+

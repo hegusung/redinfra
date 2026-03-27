@@ -1,0 +1,63 @@
+- name: Display Node IP address
+  debug:
+    msg: "Current Host IP {{ inventory_hostname }}"
+
+- name: Display Node IP address
+  debug:
+    msg: "Corresponding IP: {{ extracted_ip[0] }}"
+
+- name: Enable IP forwarding temporarily
+  shell: echo 1 >/proc/sys/net/ipv4/ip_forward
+
+- name: Make IP forwarding persistent
+  lineinfile:
+    path: /etc/sysctl.conf
+    regexp: '^net.ipv4.ip_forward'
+    line: 'net.ipv4.ip_forward = 1'
+    state: present
+
+- name: Reload sysctl configuration
+  command: sysctl -p
+
+- name: Install iptables
+  apt:
+    name: iptables
+    state: present
+
+- name: Install iptables-services
+  apt:
+    #name: iptables-services
+    name: iptables-persistent
+    state: present
+
+- name: Enable iptables service at boot
+  systemd:
+    #name: iptables
+    name: netfilter-persistent
+    enabled: true
+    state: started
+
+- name: Get the default interface
+  shell: "ip route show default | awk '{print $5}'"
+  register: default_interface
+
+- name: Flush PREROUTING rule to iptables
+  command: iptables -t nat -F PREROUTING
+
+- name: Flush POSTROUTING rule to iptables
+  command: iptables -t nat -F POSTROUTING
+
+- name: Add MASQUERADE rule to iptables
+  command: iptables -t nat -A POSTROUTING -s {{ router_vpn_ip[0] }} -j MASQUERADE
+
+- name: Add DNAT rule to iptables
+  command: iptables -t nat -A PREROUTING -i {{ default_interface.stdout }} -p tcp ! --dport 22 -j DNAT --to-destination {{ extracted_ip[0] }}
+
+- name: Flush FORWARD chain in iptables
+  command: iptables -F FORWARD
+
+- name: Save iptables rules
+  command: netfilter-persistent save
+  #command: service iptables save
+
+

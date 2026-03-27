@@ -1,0 +1,107 @@
+resource "aws_security_group" "sg_{{ name }}_{{ region }}" {
+  vpc_id = aws_vpc.main_vpc_{{ region }}.id
+
+  # Inbound Rules
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]  
+    description = "Allow SSH access"
+  }
+
+  {% for port in ports %}
+  ingress {
+    from_port   = {{ port }}
+    to_port     = {{ port }}
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]  # Allow OpenVPN from anywhere
+    description = "Allow access"
+  }
+
+  {% endfor %}
+
+  # Outbound Rules
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+  {% for key, value in tags.items() %}
+      {{ key }} = "{{ value }}",
+  {% endfor %}
+      Name = "Node_{{ name }}-security-group"
+  }
+
+  provider = aws.{{ region }}
+}
+
+resource "aws_instance" "ec2_{{ name }}_{{ region }}" {
+  ami           = "{{ ami }}"
+  instance_type = "{{ instance_type }}"
+  key_name      = aws_key_pair.ssh_key_{{ region }}.key_name
+  subnet_id     = aws_subnet.main_subnet_{{ region }}.id
+  vpc_security_group_ids = [aws_security_group.sg_{{ name }}_{{ region }}.id]
+
+  tags = {
+  {% for key, value in tags.items() %}
+      {{ key }} = "{{ value }}",
+  {% endfor %}
+      Name = "Node_{{ name }}"
+  }
+
+  provider = aws.{{ region }}
+}
+
+resource "aws_eip" "eip_{{ name }}_{{ region }}" {
+  instance = aws_instance.ec2_{{ name }}_{{ region }}.id
+
+  tags = {
+  {% for key, value in tags.items() %}
+      {{ key }} = "{{ value }}",
+  {% endfor %}
+      Name = "Node_{{ name }}-ElasticIP"
+  }
+
+  provider = aws.{{ region }}
+}
+
+# Generate Inventory Files
+resource "local_file" "inventory_{{ name }}_{{ region }}" {
+  content = <<EOT
+[all:vars]
+ansible_ssh_common_args='-o StrictHostKeyChecking=accept-new'
+
+[node]
+${aws_eip.eip_{{ name }}_{{ region }}.public_ip} ansible_ssh_user=ubuntu ansible_ssh_private_key_file=../files/ansible
+EOT
+  filename = "inventory/node_{{ name }}.ini"
+
+  depends_on = [aws_eip.eip_{{ name }}_{{ region }}]
+}
+
+# Detect Changes in vars.yml
+#data "local_file" "vars_{{ name }}_{{ region }}" {
+#  filename = "vars/node_{{ name }}.yml"
+#}
+
+# Run Ansible Playbook for Web Servers using local-exec
+resource "null_resource" "ansible_{{ name }}_{{ region }}" {
+  triggers = {
+    instance_id = aws_instance.ec2_{{ name }}_{{ region }}.id
+    #vars_checksum = filemd5(data.local_file.vars_{{ name }}_{{ region }}.filename) 
+  }
+
+  provisioner "local-exec" {
+    command = <<EOT
+      ansible-playbook -i ${local_file.inventory_{{ name }}_{{ region }}.filename} -i inventory/vpn.ini ../ansible/install_node.yml --extra-vars "certificate_name={{ name }}" --extra-vars "node_id=${aws_instance.ec2_{{ name }}_{{ region }}.id}" 
+    EOT
+  }
+
+  #depends_on = [null_resource.ansible_vpn, aws_instance.ec2_{{ name }}_{{ region }}, local_file.inventory_{{ name }}_{{ region }}]
+  depends_on = [null_resource.ansible_vpn, aws_instance.ec2_{{ name }}_{{ region }}]
+}
+

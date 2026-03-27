@@ -1,0 +1,95 @@
+server {
+    listen 80;
+    server_name {{ item["site"] }};
+
+    # Optional: force HTTPS
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name {{ item["site"] }};
+
+    # Optional: protect large uploads
+    client_max_body_size 2G;
+
+    # Root of the WebDAV share
+    root /var/www/{{ item["site"] }};
+
+    # SSL Certificates
+    ssl_certificate     /etc/nginx/ssl/default.crt;
+    ssl_certificate_key /etc/nginx/ssl/default.key;
+
+    # RedELK Logging
+    set $redir_hostname "{{ item["site"] }}";
+
+    # Logging (optional)
+    access_log /var/log/nginx/geoip_debug.log geoip_debug;
+    access_log /var/log/nginx/access-redelk.log redelklog;
+    access_log /var/log/nginx/{{ item["site"] }}.access.log;
+    error_log  /var/log/nginx/{{ item["site"] }}.error.log;
+
+
+
+    # Index / directory listing
+    autoindex on;
+    autoindex_exact_size off;
+    autoindex_localtime on;
+
+    location / {
+
+{% if "backend_name" in item %}
+	set $backend_name "{{ item["backend_name"] }}";
+{% endif %}
+
+{% if "disallow" in item and "fallback_path" in item %}
+{% for disallowed_asn in item["disallow"]['ASN'] %}
+	# Disallowed ASNs
+	if ($geoip2_asn_org ~* "{{ disallowed_asn }}") {
+            return 302 {{ item["fallback_path"] }};
+        }
+
+{% endfor %}
+
+
+{% for disallowed_country in item["disallow"]['country'] %}
+	# Disallowed Countries
+	if ($geoip2_asn_org ~* "{{ disallowed_country }}") {
+            return 302 {{ item["fallback_path"] }};
+        }
+
+{% endfor %}
+{% endif %}
+
+
+{% if "allow" in item and "fallback_path" in item %}
+
+{% set allowed_countries = item["allow"]['country'] | join('|') %}
+{% if allowed_countries %}
+	# Allowed Countries
+	if ($geoip2_country_code !~ "^({{ allowed_countries }})$") {
+    	    return 302 {{ item["fallback_path"] }};
+	}
+{% endif %}
+
+{% set allowed_asn = item["allow"]['ASN'] | join('|') %}
+{% if allowed_asn %}
+	# Allowed ASN
+	if ($geoip2_asn_org !~ "{{ allowed_asn }}") {
+	    return 302 {{ item["fallback_path"] }};
+	}
+{% endif %}
+
+{% endif %}
+
+	    # Core DAV module
+	    dav_methods PUT DELETE MKCOL COPY MOVE;
+	    create_full_put_path on;
+	    dav_access user:rw group:rw all:r;
+
+	    # dav-ext module (adds PROPFIND, OPTIONS)
+	    dav_ext_methods PROPFIND OPTIONS;
+	}
+
+}
+

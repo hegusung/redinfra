@@ -1,0 +1,10 @@
+---
+- name: Install Gophish
+  hosts: host
+  gather_facts: no
+  become: yes
+  tasks:
+    - name: Install and configure Gophish
+      include_role:
+        name: mail
+        tasks_from: setup_gophish.yml

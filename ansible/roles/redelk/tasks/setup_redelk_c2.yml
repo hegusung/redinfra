@@ -1,0 +1,17 @@
+- name: Upload redelk tgz
+  synchronize:
+    src: "../files/{{ c2_tgz }}"
+    dest: "/opt/"
+    recursive: yes
+    delete: no
+
+- name: Uncompress redelk tgz
+  shell: "tar xzvf {{ c2_tgz }}"
+  args:
+    chdir: "/opt/"
+
+- name: Install redelk C2
+  shell: "./install-c2server.sh {{ filebeatid }} {{ scenario_name }} {{ redelk_url }}"
+  args:
+    chdir: "/opt/c2servers/"
+

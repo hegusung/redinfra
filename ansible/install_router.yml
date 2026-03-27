@@ -1,0 +1,10 @@
+---
+- name: Install and Configure the RedInfra Router
+  hosts: localhost
+  gather_facts: no
+  become: yes
+  tasks:
+    - name: Install the RedInfra Router
+      include_role:
+        name: router
+        tasks_from: install.yml

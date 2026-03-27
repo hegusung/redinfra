@@ -1,0 +1,10 @@
+---
+- name: Install Postfix, Dovecot and Roundcube with Sendgrid redirector
+  hosts: host
+  gather_facts: no
+  become: yes
+  tasks:
+    - name: Install and configure postfix, dovecot and roundcube
+      include_role:
+        name: mail
+        tasks_from: setup_postfix_dovecot_roundcube.yml

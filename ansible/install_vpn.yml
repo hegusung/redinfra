@@ -1,0 +1,34 @@
+---
+- name: Install and Configure the RedInfra VPN
+  hosts: vpn
+  gather_facts: no
+  become: yes
+  tasks:
+    - name: Wait for the EC2 instance to be accessible via SSH
+      wait_for:
+        host: "{{ inventory_hostname }}"
+        port: 22  # Port for SSH
+        state: started
+        delay: 10  # Initial delay before starting to check
+        timeout: 300  # Maximum time to wait (5 minutes)
+        sleep: 10  # Time between retries
+      delegate_to: localhost
+
+    - name: Install the VPN EC2
+      include_role:
+        name: redinfra_vpn
+        tasks_from: install.yml
+
+    - name: Generate router certificate
+      include_role:
+        name: redinfra_vpn
+        tasks_from: generate_certificate.yml
+
+    - name: Setup the router certificate
+      include_role:
+        name: router
+        tasks_from: setup_config.yml
+        apply:
+          delegate_to: localhost
+
+
