@@ -1,261 +1,385 @@
-# RedInfra
-Easily deploy redirectors through AWS, manage DNS entries and route outgoing traffic
+# 🔴 RedInfra — Automation Branch
 
-Features:
-  * Route an internet-exposed AWS node to a C&C for specific ports
-  * Route an operator computer traffic to internet through an AWS node
-  * Start/Stop AWS instances
-  * Renew/Associate/Dissociate Elastic IPs to AWS instances
-  * Manage DNS entries
+Automated red team infrastructure deployment and management.  
+Provisions AWS instances via Terraform, configures DNS (Cloudflare), mail (SendGrid), O365 tenants, VPN routing, and runs Ansible playbooks — all driven by YAML mission files.
 
-## Usage
+> This README covers the [`automation`](https://github.com/hegusung/redinfra/tree/automation) branch.
 
-To list the current configuration:
-```
-./redinfra.py --show-config
-```
+---
 
-To apply the routing (after you checked the config):
-```
-./redinfra.py --apply
-```
+## Features
 
-### Setting up DNS entries
+- **Terraform** — provision/destroy AWS EC2 instances per mission node
+- **Cloudflare** — sync A records, proxied records, MX, TXT entries from mission config
+- **SendGrid** — manage authenticated domains and verified senders
+- **O365** — manage Azure AD domains, licenses, and mailboxes via Graph API
+- **Ansible** — run playbooks on nodes over VPN (Mythic, GoPhish, Postfix, WebDAV, Responder, RedELK…)
+- **Routing** — configure iptables rules on the router to redirect ports from AWS nodes to C2
+- **VPN** — OpenVPN tap-based mesh between the router and all AWS nodes
+- **CLI** — subcommands for each service (`aws`, `cloudflare`, `sendgrid`, `o365`, `local`, `auto`)
+- **Web UI** — optional Flask dashboard (`dashboard/app.py`) for managing missions without touching YAML
 
-#### Listing current DNS entries
-```
-./redinfra.py --list-dns
-```
+---
 
-#### Add a DNS entry
-```
-./redinfra.py --new-dns <domain> <ip>
-```
+## Requirements
 
-#### Remove a DNS entry
-```
-./redinfra.py --remove-dns <domain> <ip>
-```
+### System
 
-### Setting up the AWS instances and Elastic IPs
+- Ubuntu/Debian (tested)
+- Python 3.8+
+- Ansible
+- Terraform
+- OpenVPN
 
-#### Listing current AWS instances
-```
-./redinfra.py --list-aws
-```
+### Python dependencies
 
-#### Start an instance
 ```
-./redinfra.py --start-aws <aws-instance>
+boto3
+pyroute2
+sendgrid
+ansible-runner
+python-terraform
+msal
+colorama
 ```
 
-#### Stop an instance
-```
-./redinfra.py --stop-aws <aws-instance>
-```
+---
 
-#### Listing current Elastic IPs
-```
-./redinfra.py --list-elastic-ips
-```
+## Installation
 
-#### Associate an Elastic IP to an instance
-```
-./redinfra.py --associate-ip <elastic-ip> <aws-instance>
+### 1. Clone the repo
+
+```bash
+git clone https://github.com/hegusung/redinfra.git -b automation /opt/redinfra
+cd /opt/redinfra
 ```
 
-#### Dissociate an Elastic IP from an instance
-```
-./redinfra.py --associate-ip <elastic-ip>
-```
+### 2. Run the install script (Ubuntu/Debian)
 
-#### Renew an Elastic IP
-```
-./redinfra.py --renew-ip <elastic-ip>
+```bash
+sudo bash install.sh
 ```
 
-### Route an instance with a node
+This installs: Ansible, Terraform, OpenVPN, Python deps.
 
-Current routing can be listed with
-```
-./redinfra.py --list-routing
-```
+### 3. Install Python requirements
 
-#### C&C configuration (port 80 and 443 from an instance rooted to the C&C)
-```
-./redinfra.py --set-routing <aws_instance> <c&c_local_ip> 80,443
-
-# Check the config
-./redinfra.py --show-config
-
-# Apply the config
-./redinfra.py --apply
-```
-
-#### Outgoing traffic routing
-```
-./redinfra.py --set-routing <aws_instance> <attacker_host_local_ip> ''
-
-# Check the config
-./redinfra.py --show-config
-
-# Apply the config
-./redinfra.py --apply
-```
-
-The attacker host default route must be the router
-
-Remember to disable IPv6
-
-## Install
-
-### Preparing the router
-
-Connect to the routing server
-
-#### Clone the redinfra project
-
-Clone the redinfra project
-```
-git clone https://github.com/hegusung/redinfra
-cd redinfra
+```bash
 pip3 install -r requirements.txt
 ```
 
-#### Create the OpenVPN server
+---
 
-Clone and setup the openvpn-install project
-```
-git clone https://github.com/angristan/openvpn-install.git
-cd openvpn-install
-./openvpn-install.sh
-```
+## Configuration
 
-  * Edit the /etc/openvpn/server.conf
-  * Add "client-to-client" to the configuration
-  * Change "dev tun" to "dev tap"
-  * Remove the following line : 'push "redirect-gateway def1 bypass-dhcp"'
+### `config/main.yml`
 
-To prevent connections from the VPN to the router
-```
-iptables -A INPUT -s 192.168.56.0/24 -j DROP
+Global credentials and network settings. Copy from the sample:
+
+```bash
+cp config/main.yml.sample config/main.yml
 ```
 
-#### Generate the EC2 configuration
+```yaml
+api:
+  aws_key: AWS_KEY
+  aws_secret: AWS_SECRET
+  cloudflare_key: CLOUDFLARE_API_KEY
+  sendgrid_api: SENDGRID_API_KEY
+  o365:
+    - tenant_id: TENANT_ID
+      client_id: CLIENT_ID
+      client_secret: CLIENT_SECRET
 
-Execute the following and follow the instructions
-```
-./openvpn-install.sh
-```
+tags:
+  Team: RedTeam
+  Owner: operator
 
-### Preparing AWS
+routing:
+  vpn_interface: tap0
+  iptables_chain: redinfra
+  vpn_range: 192.168.40.0/24
+  rule_start_table: 10
+  rule_priority: 30000
 
-#### Generating API keys
-
-  * Go to your AWS interface > Identity and Access Management (IAM) > Access management > Users
-  * Select the user to to connect to AWS using the API
-  * Go to the "Security credentials" tab > Access keys section
-  * Generate an access key
-  * Put this access key in the redinfra.cfg file  (create this file from the redinfra.cfg.sample)
-
-#### Add a domain from AWS to manage
-
-  * Go to your AWS interface > Route 53 > Hosted zone
-  * Click on "Create hosted zone"
-  * Fill the information and "Create hosted zone"
-
-#### Create an EC2 instance
-
-  * Go to your AWS interface > EC2
-  * Select the desired region (top-right corner)
-  * Make sure the region is provided in the redinfra.cfg file so the script can find the instance
-  * Go to Instances > Instances
-  * Create an instance by clicking on "Launch instances" (top-right corner)
-  * Once the instance is created, click on it
-  * Go to Security tab and set the firewall parameters, generally you need the following
-      * Inbound rules:
-          * port 22, to connect to the instance and configure it later on
-          * the port to be redirected to the C&C, if any
-      * Outbound rules:
-          * All port to 0.0.0.0/0
-
-#### Create an elastic IP
-
-  * Go to your AWS interface > EC2
-  * Select the desired region (top-right corner)
-  * Make sure the region is provided in the redinfra.cfg file so the script can find the instance
-  * Go to Network & Security > Elastic IPs
-  * Create an instance by clicking on "Allocate Elastic IP address" (top-right corner)
-  * Allocate the Elastic IP to the instance
-
-### Preparing the EC2 instance
-
-Transfer the Openvpn from the Router to the EC2 instance
-```
-scp -i aws_ssh_key.pem Node.ovpn ec2-user@<aws_public_ip>:.
+vpn:
+  region: eu-west-1
+  instance_type: t2.micro
 ```
 
-Connect to the EC2 using the SSH key
-```
-ssh -i aws_ssh_key.pem ec2-user@<aws_public_ip>
-```
-#### Install openvpn
+### `config/<mission>.yml`
 
-Install openvpn in the EC2 instance
-```
-# Install EC2 extensions
-amazon-linux-extras install epel
-yum update
-# Install OpenVPN
-yum install openvpn
+One file per mission. Copy from the sample:
+
+```bash
+cp config/mission.yml.sample config/my-mission.yml
 ```
 
-Edit the Openvpn config file
-  * change "dev tun" to "dev tap"
+```yaml
+mission: operation-nightfall
+enabled: true
 
-Copy the configuration 
+c2:
+  region: eu-west-1
+  instance_type: t3.medium
+  local_ip: 192.168.56.110
+  ports: [80, 443]
+  dns_A:
+    - c2.redteamdomain.com
+  dns_proxy: []
+  ansible:
+    - playbook: install_mythic.yml
+      args:
+        mythic_password: Passw0rd!
+        github_extensions:
+          - https://github.com/MythicC2Profiles/httpx
+
+phishing:
+  region: eu-west-2
+  instance_type: t2.small
+  local_ip: 192.168.56.100
+  ports: [25, 80, 443, 587]
+  dns_A:
+    - mx.redteamdomain.com
+  dns_proxy:
+    - phish.redteamdomain.com
+  dns:
+    MX:
+      - key: redteamdomain.com
+        value: mx.redteamdomain.com
+  mail:
+    - mail: john.doe@redteamdomain.com
+      name: John Doe
+  ansible:
+    - playbook: install_mail.yml
+      args:
+        domains:
+          - domain: redteamdomain.com
+            users:
+              - name: John Doe
+                mail: john.doe
+                password: changeme
+        sendgrid_password: SENDGRID_API_KEY
+    - playbook: install_gophish.yml
+      args:
+        mails: [john.doe@redteamdomain.com]
+        web_domains: [phish.redteamdomain.com]
+        gophish_rid: token
+        gophish_track_uri: /track
+        gophish_uris: [/login]
+
+payloads:
+  region: eu-west-3
+  instance_type: t2.micro
+  local_ip: 192.168.56.101
+  ports: [80, 443]
+  dns_proxy:
+    - payloads.redteamdomain.com
+  ansible:
+    - playbook: install_web.yml
+      args:
+        web_domains:
+          - payloads.redteamdomain.com
+
+responder:
+  region: eu-north-1
+  instance_type: t3.micro
+  local_ip: 192.168.56.102
+  ports: [80, 445]
+  dns_A:
+    - smb.redteamdomain.com
+  ansible:
+    - playbook: install_responder.yml
 ```
-sudo cp Node.ovpn /etc/openvpn/client/Node.conf
+
+Only **enabled** missions (`enabled: true`) are processed during deployment.
+
+---
+
+## Usage
+
+### Automation (`auto`)
+
+Deploy everything for all enabled missions:
+```bash
+python3 redinfra.py auto --apply
 ```
 
-Start OpenVPN service
-
-```
-systemctl start openvpn-client@Node
-systemctl enable openvpn-client@Node
+Destroy all resources:
+```bash
+python3 redinfra.py auto --destroy
 ```
 
-#### Configure the VPN IP on the router
-
-Connect to the router, setup the VPN IP of the newly generated EC2 instance with the following command:
-```
-./redinfra.py --set-vpn-ip <aws_instance> <vpn_ip>
-```
-
-Save the given router IP, it will be useful for after... (on the instance config)
-
-VPN config can be listed with:
-```
-./redinfra.py --list-vpn-ip
+Run individual steps:
+```bash
+python3 redinfra.py auto --apply-terraform    # provision EC2 instances
+python3 redinfra.py auto --apply-cloudflare   # sync DNS records
+python3 redinfra.py auto --apply-sendgrid     # configure mail domains/senders
+python3 redinfra.py auto --apply-o365         # configure Azure AD
+python3 redinfra.py auto --apply-routing      # apply iptables routing rules
+python3 redinfra.py auto --apply-ansible      # run all Ansible playbooks
 ```
 
-#### Setup the routing on the instance
-
-Execute the following commands
-```
-echo 1 >/proc/sys/net/ipv4/ip_forward
-# Make this persistent, edit the /etc/sysctl.d/00-defaults.conf file:
-net.ipv4.ip_forward = 1
-
-# setup iptables
-iptables -F FORWARD
-iptables -t nat -A POSTROUTING -s <ip_vpn_router> -j MASQUERADE
-iptables -t nat -A PREROUTING -d <ip_local_aws> -p tcp ! --dport 22 -j DNAT --to-destination <ip_vpn_router_given>   # usually the ip + 100 given when saving the AWS VPN IP in redinfra.py
-
-# Make this persistent
-yum install iptables-services -y
-systemctl enable iptables
-systemctl start iptables
-service iptables save
+Run playbooks for a specific mission/node:
+```bash
+python3 redinfra.py auto --playbooks <mission> <server>
+# e.g.:
+python3 redinfra.py auto --playbooks operation-nightfall phishing
 ```
 
+Install system dependencies:
+```bash
+python3 redinfra.py auto --install
+```
+
+---
+
+### AWS (`aws`)
+
+```bash
+# List all instances across configured regions
+python3 redinfra.py aws --list
+
+# Start / stop an instance
+python3 redinfra.py aws --start <instance-id>
+python3 redinfra.py aws --stop  <instance-id>
+
+# Elastic IPs
+python3 redinfra.py aws --list-ips
+python3 redinfra.py aws --new-ip <region>
+python3 redinfra.py aws --remove-ip <ip>
+python3 redinfra.py aws --renew-ip <ip>
+python3 redinfra.py aws --associate-ip <ip> <instance-id>
+python3 redinfra.py aws --dissociate-ip <ip>
+```
+
+---
+
+### Cloudflare (`cloudflare`)
+
+```bash
+python3 redinfra.py cloudflare --list
+python3 redinfra.py cloudflare --new <dns> <value> [--dns-type A]
+python3 redinfra.py cloudflare --new-proxy <dns> <value>
+python3 redinfra.py cloudflare --remove-dns <dns> <value>
+```
+
+---
+
+### SendGrid (`sendgrid`)
+
+```bash
+python3 redinfra.py sendgrid --list-domains
+python3 redinfra.py sendgrid --new-domain <domain>
+python3 redinfra.py sendgrid --delete-domain <domain>
+
+python3 redinfra.py sendgrid --list-senders
+python3 redinfra.py sendgrid --new-sender <name> <email>
+python3 redinfra.py sendgrid --delete-sender <email>
+```
+
+---
+
+### O365 (`o365`)
+
+```bash
+python3 redinfra.py o365 --list-domains
+python3 redinfra.py o365 --list-emails
+```
+
+Credentials are read from `main.yml` (`api.o365`). Domain/email data is merged from mission YAMLs (node `o365:` block).
+
+---
+
+### Local routing & VPN (`local`)
+
+```bash
+# Show full current config (AWS + routing)
+python3 redinfra.py local --show-config
+
+# VPN IP management
+python3 redinfra.py local --set-vpn-ip <instance> <vpn-ip>
+python3 redinfra.py local --list-vpn-ip
+python3 redinfra.py local --remove-vpn-ip <instance>
+
+# Routing rules
+python3 redinfra.py local --set-routing <instance> <local-ip> <ports>
+python3 redinfra.py local --list-routing
+python3 redinfra.py local --remove-routing <instance>
+python3 redinfra.py local --apply      # apply iptables rules
+python3 redinfra.py local --clear-config
+```
+
+---
+
+## Ansible Playbooks
+
+Playbooks are in `ansible/` and run automatically during `--apply-ansible` or `--playbooks`.
+
+| Playbook | Description |
+|---|---|
+| `install_mythic.yml` | Mythic C2 framework + optional GitHub extensions |
+| `install_mail.yml` | Postfix / Dovecot / Roundcube mail stack |
+| `install_gophish.yml` | GoPhish phishing framework |
+| `install_web.yml` | Nginx with geo/ASN filtering |
+| `install_webdav.yml` | Nginx WebDAV server |
+| `install_responder.yml` | Responder (LLMNR/NBT-NS poisoner) |
+| `install_vpn.yml` | OpenVPN node setup |
+| `install_node.yml` | Base node bootstrap (firewall, VPN client) |
+| `install_redelk_c2.yml` | RedELK on C2 server |
+| `install_redelk_redirectors.yml` | RedELK on redirectors |
+| `install_router.yml` | Router setup |
+
+Playbooks are invoked via `ansible-runner` over the VPN using `local_ip` from the mission YAML.  
+Custom playbooks can be added directly to the `ansible:` list of any node — they are executed like built-in ones.
+
+---
+
+## Project Layout
+
+```
+redinfra/
+├── redinfra.py              # CLI entry point
+├── install.sh               # System dependencies installer
+├── requirements.txt         # Python dependencies
+├── config/
+│   ├── aws.yml              # AMI map per region (do not edit)
+│   ├── main.yml.sample      # Global config template
+│   └── mission.yml.sample   # Mission config template
+├── lib/
+│   ├── automation.py        # Orchestration (apply/destroy/playbooks)
+│   ├── aws.py               # EC2 + Elastic IP management
+│   ├── cloudflare.py        # DNS management
+│   ├── sendgridclient.py    # SendGrid domains/senders
+│   ├── o365.py              # Azure AD / Graph API
+│   ├── routing.py           # iptables routing + VPN IP
+│   ├── terraform.py         # Terraform wrapper
+│   ├── config.py            # YAML config loader
+│   └── color.py             # Terminal colors
+├── ansible/
+│   ├── install_*.yml        # Top-level playbooks
+│   └── roles/               # Ansible roles (mail, mythic, web, …)
+├── templates/
+│   ├── default.tf.j2        # Terraform VPN node template
+│   ├── node.tf.j2           # Terraform mission node template
+│   └── vpn.tf.j2            # Terraform VPN instance template
+└── dashboard/
+    ├── app.py               # Optional Flask web UI
+    └── nginx.conf           # nginx reverse proxy for the dashboard
+```
+
+---
+
+## Notes
+
+- Missions are loaded at runtime — only `enabled: true` missions are processed.
+- `config/aws.yml` maps regions to AMI IDs — update it if AMIs are outdated in your target region.
+- Routing uses `pyroute2` and iptables — must be run as root on the router.
+- Ansible connects to nodes via their `local_ip` (VPN address) — nodes must be reachable over VPN before running playbooks.
+- Duplicate keys in YAML configs raise an error (strict loader).
+
+---
+
+## License
+
+For authorized red team use only.
