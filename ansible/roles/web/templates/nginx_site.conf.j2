@@ -74,6 +74,11 @@ server {
 
 {% endif %}
 
+{% if "websocket" in location and location["websocket"] == true %}
+	proxy_set_header   Upgrade    $http_upgrade;
+    	proxy_set_header   Connection "upgrade";
+{% endif %}
+
 {% if "proxy" in location %}
 	proxy_pass {{ location["proxy"] }};
 {% else %}
