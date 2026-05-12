@@ -29,35 +29,15 @@
 
 - name: Stop OpenVPN service
   service:
-    name: openvpn      # Name of the service (replace with your service name)
-    state: stopped   # Ensures the service is stopped
+    name: openvpn-server@server
+    state: stopped
 
-- name: "S'assurer que OpenVPN est mort (tentatives répétées)"
-  shell: "killall -9 openvpn"
-  register: openvpn_kill_result
-  failed_when: false
-  until: openvpn_kill_result.rc != 0
-  retries: 6
-  delay: 10
-
-- name: "60 seconds sleep"
-  ansible.builtin.pause:
-    seconds: 60
-
-- name: Stop OpenVPN service
-  service:
-    name: openvpn      # Name of the service (replace with your service name)
-    state: stopped   # Ensures the service is stopped
-
-- name: "S'assurer que OpenVPN est mort (tentatives répétées)"
-  shell: "killall -9 openvpn"
-  register: openvpn_kill_result
-  failed_when: false
-  until: openvpn_kill_result.rc != 0
-  retries: 6
-  delay: 10
-
-
+- name: Wait for openvpn to stop
+  wait_for:
+    path: /var/run/openvpn-server/server.pid
+    state: absent
+    timeout: 30
+  ignore_errors: yes
 
 - name: Change IP range
   command: sed -i 's/10.8.0.0/{{ base_vpn_ip }}/' /etc/openvpn/server/server.conf
@@ -73,5 +53,5 @@
 
 - name: Start OpenVPN service
   service:
-    name: openvpn      # Name of the service (replace with your service name)
-    state: started   # Ensures the service is started
+    name: openvpn-server@server
+    state: started  
