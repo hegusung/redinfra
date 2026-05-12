@@ -8,6 +8,7 @@
       - git
       - python3
       - python3-pip
+      - unzip
     state: present
     update_cache: yes
 
@@ -66,8 +67,15 @@
     delete: no
   loop: "{{ local_extensions }}"
 
+- name: Unzip local extensions
+  unarchive:
+    src: "/opt/{{ item }}"
+    dest: "/opt/"
+    remote_src: yes
+  loop: "{{ local_extensions }}"
+
 - name: Install local extensions
-  shell: "./mythic-cli install folder /opt/{{ item }} -f"
+  shell: "./mythic-cli install folder /opt/{{ item | splitext | first }} -f"
   args:
     chdir: "/opt/mythic"
   loop: "{{ local_extensions }}"
