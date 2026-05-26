@@ -71,6 +71,51 @@ class Tenant:
 
         self.token = result["access_token"]
 
+    def get_exo_token(self):
+        return self.app.acquire_token_for_client(
+            scopes=["https://outlook.office365.com/.default"]
+        )["access_token"]
+
+    def invoke_exo_cmdlet(self, cmdlet, parameters):
+        token = self.get_exo_token()
+        url = "https://outlook.office365.com/adminapi/beta/%s/InvokeCommand" % self.config['tenant_id']
+        headers = {
+            "Authorization": "Bearer %s" % token,
+            "Content-Type": "application/json",
+            "Accept-Encoding": "identity",
+        }
+        payload = {"CmdletInput": {"CmdletName": cmdlet, "Parameters": parameters}}
+        resp = requests.post(url, headers=headers, json=payload)
+        if not resp.ok:
+            resp.raise_for_status() 
+        return resp.json().get("value", [])
+
+    def get_dkim_cnames(self, domain):
+        try:
+            self.invoke_exo_cmdlet("New-DkimSigningConfig", {
+                "DomainName": domain,
+                "Enabled": False
+            })
+        except requests.exceptions.HTTPError as e:
+            body = e.response.json()
+            details = body.get("error", {}).get("details", [])
+            already_exists = any(
+                "ADObjectAlreadyExistsException" in d.get("message", "")
+                for d in details
+            )
+            if not already_exists:
+                print(color("    [-] Cmdlet error New-DkimSigningConfig: %s" % e.response.text, "red"))
+                raise
+            
+
+        results = self.invoke_exo_cmdlet("Get-DkimSigningConfig", {"Identity": domain})
+        if not results:
+            raise ValueError(f"Aucune config DKIM trouvée pour {domain}")
+        return {
+            "selector1._domainkey": results[0]["Selector1CNAME"],
+            "selector2._domainkey": results[0]["Selector2CNAME"],
+        }
+
     def list_users(self):
         resp = requests.get(
             "https://graph.microsoft.com/v1.0/users?$select=id,userPrincipalName,assignedLicenses",
@@ -81,6 +126,7 @@ class Tenant:
 
     def delete_old_users(self):
         print(color("    [*] Deleting old O365 users...", "blue"))
+        user_deleted = False
 
         for user in self.list_users():
             if not user["userPrincipalName"] in self.users:
@@ -91,6 +137,7 @@ class Tenant:
                 )
                 
                 if not 'error' in resp.json() and len(resp.json()["value"]) == 0: # Simple user, we can delete
+                    user_deleted = True
                     print(color("    [*] Deleting user %s" % user["userPrincipalName"], "blue"))
 
                     resp = requests.delete(
@@ -101,6 +148,10 @@ class Tenant:
                         print(color("    [+] User %s deleted" % user["userPrincipalName"], "green"))
                     else:
                         print(color("    [-] Failed to delete user: %s" % resp.json(), "red"))
+
+        if user_deleted:
+            print("Some users deleted, Waiting 30 seconds")
+            time.sleep(30)
 
         print(color("    [*] Done", "blue"))
 
@@ -155,10 +206,12 @@ class Tenant:
 
                 print(color("    [*] Adding a licence to %s" % user, "blue"))
 
-                if available_licences['f245ecc8-75af-4f8e-b61f-27d8114de5f3'] == 0:
+                if not '3b555118-da6a-4418-894f-7df1e2096870' in available_licences:
+                    print(color("    [-] No Microsoft 365 Business Basic licences, buy some", "red"))
+                elif available_licences['3b555118-da6a-4418-894f-7df1e2096870'] == 0:
                     print(color("    [-] No more licences to user, buy more", "red"))
                 else:
-                    skuid = 'f245ecc8-75af-4f8e-b61f-27d8114de5f3'
+                    skuid = '3b555118-da6a-4418-894f-7df1e2096870'
                     print(color("    [*] Using license %s" % skuid, "blue"))
 
                     body = {
@@ -295,10 +348,12 @@ class Tenant:
     def get_dns_entries(self):
 
         # We need the tenant name to guess the DKIM
+        """
         tenant_name = None
         for domain in self.list_domains():
             if domain['id'].endswith(".onmicrosoft.com"):
                 tenant_name = domain['id'][:-1*len(".onmicrosoft.com")]
+        """
 
         for domain in self.list_domains():
             if not domain['id'] in self.services:
@@ -312,8 +367,6 @@ class Tenant:
             )
             domain_id = None
             for record in resp.json().get('value', []):
-                # So Microsoft API sucks and doesn't provide the DKIM entries so we will try to guess it
-                # Format => CNAME    selector1._domainkey.{domain}    selector1-{domain_id}._domainkey.{tenant_name}.w-v1.dkim.mail.microsoft
                 if 'mailExchange' in record and record['mailExchange'].endswith(".mail.protection.outlook.com"):
                     domain_id = record['mailExchange'][:-1*len(".mail.protection.outlook.com")]
 
@@ -323,6 +376,12 @@ class Tenant:
             # Add a DMARK
             yield {"label": "_dmarc.%s" % domain["id"], "recordType": "Txt", "text": "v=DMARC1; p=reject; pct=100;"}
 
-            for key, value in self.config['domains'][domain['id']]['dkim'].items():
-                yield {"label": "%s.%s" % (key, domain["id"]), "recordType": "CName", "canonicalName": value}
+            #for key, value in self.config['domains'][domain['id']]['dkim'].items():
+            #    yield {"label": "%s.%s" % (key, domain["id"]), "recordType": "CName", "canonicalName": value}
+            try:
+                for key, value in self.get_dkim_cnames(domain["id"]).items():
+                    yield {"label": "%s.%s" % (key, domain["id"]), "recordType": "CName", "canonicalName": value}
+            except:
+                print(color("    [-] Failed to gather DKIM DNS entries", "red"))
+
 
