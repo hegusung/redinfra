@@ -35,7 +35,7 @@ class Config:
     def __init__(self):
         self.previous_config = None
 
-        self.region_to_ami = self.load_ami()
+        #self.region_to_ami = self.load_ami()
 
         self.main_config = self.load_main()
 
@@ -47,9 +47,11 @@ class Config:
 
     # == Config load ==
 
+    """
     def load_ami(self):
         with open(CONFIG_PATH + "aws.yml") as stream:
             return yaml.load(stream, DupCheckLoader)
+    """
 
     def load_main(self):
         with open(CONFIG_PATH + "main.yml") as stream:
@@ -96,7 +98,8 @@ class Config:
                 regions.append(self.missions[mission][server]['region'])
         """
 
-        regions = list(self.load_ami().keys()) 
+        #regions = list(self.load_ami().keys()) 
+        regions = self.main_config['aws_regions']
 
         return list(set(regions))
 
@@ -106,8 +109,10 @@ class Config:
     def get_vpn_instance_type(self):
         return self.main_config['vpn']['instance_type']
 
+    """
     def get_ami(self, region):
         return self.region_to_ami[region]
+    """
 
     def get_nodes(self):
         node_list = []

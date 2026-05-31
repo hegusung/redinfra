@@ -39,8 +39,25 @@ resource "aws_security_group" "sg_{{ name }}_{{ region }}" {
   provider = aws.{{ region }}
 }
 
+data "aws_ami" "ubuntu_{{ name }}_{{ region }}" {
+  most_recent = true
+  owners      = ["099720109477"]
+
+  filter {
+    name   = "name"
+    values = ["ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-*"]
+  }
+
+  filter {
+    name   = "state"
+    values = ["available"]
+  }
+
+  provider = aws.{{ region }}
+}
+
 resource "aws_instance" "ec2_{{ name }}_{{ region }}" {
-  ami           = "{{ ami }}"
+  ami           = data.aws_ami.ubuntu_{{ name }}_{{ region }}.id
   instance_type = "{{ instance_type }}"
   key_name      = aws_key_pair.ssh_key_{{ region }}.key_name
   subnet_id     = aws_subnet.main_subnet_{{ region }}.id

@@ -43,12 +43,11 @@ class Terraform:
     def create_vpn_file(self, region):
         template = self.env.get_template("vpn.tf.j2")
 
-        ami = self.config.get_ami(region)
         base_vpn_ip = self.config.get_routing_config()['vpn_range'].split('/')[0]
         tags = self.config.get_tags()
         instance_type = self.config.get_vpn_instance_type()
             
-        output = template.render(name="RedInfraVPN", ami=ami, region=region, base_vpn_ip=base_vpn_ip, tags=tags, instance_type=instance_type)
+        output = template.render(name="RedInfraVPN", region=region, base_vpn_ip=base_vpn_ip, tags=tags, instance_type=instance_type)
 
         with open("./terraform/vpn.tf", "w") as f:
             f.write(output)
@@ -62,9 +61,7 @@ class Terraform:
         instance_type = node_info['instance_type']
         tags = self.config.get_tags()
 
-        ami = self.config.get_ami(region)
-            
-        output = template.render(name=name, ami=ami, region=region, ports=ports, tags=tags, instance_type=instance_type)
+        output = template.render(name=name, region=region, ports=ports, tags=tags, instance_type=instance_type)
 
         with open("./terraform/node_%s.tf" % name, "w") as f:
             f.write(output)
