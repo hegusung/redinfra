@@ -120,36 +120,34 @@
     chdir: "/opt/gophish"
   loop: "{{ mails }}"
 
-# Installing Apache front
-
-- name: Install apache
+# Installing Nginx front
+- name: Install nginx
   apt:
     name: 
-      - apache2
+      - nginx
     state: present
 
 # Stop services if existing
-
-- name: Stop apache service if present
+- name: Stop nginx service if present
   service:
-    name: apache2
+    name: nginx
     state: stopped
   ignore_errors: yes
 
-- name: Enable apache mods
-  shell: a2enmod proxy proxy_http ssl rewrite headers
-
-- name: Generate apache config files
+- name: Generate nginx config files
   template:
-    src: templates/apache.conf.j2
-    dest: /etc/apache2/sites-available/{{ item }}.conf
+    src: templates/nginx.conf.j2
+    dest: /etc/nginx/sites-available/{{ item }}.conf
     owner: root
     group: root
     mode: '0644'
   loop: "{{ web_domains }}"
 
-- name: Enable apache site
-  shell: a2ensite {{ item }}.conf
+- name: Enable nginx site
+  file:
+    src: /etc/nginx/sites-available/{{ item }}.conf
+    dest: /etc/nginx/sites-enabled/{{ item }}.conf
+    state: link
   loop: "{{ web_domains }}"
 
 - name: Create dir
@@ -157,10 +155,48 @@
   loop: "{{ web_domains }}"
   ignore_errors: yes
 
-- name: Start and enable apache2 service
+- name: Start and enable nginx service
   service:
-    name: apache2
+    name: nginx
     state: started
-    enabled: yes 
+    enabled: yes
+
+# SMTP2O365
+- name: Stop smtp2O365 service if present
+  service:
+    name: smtp2O365
+    state: stopped
+  ignore_errors: yes
+
+- name: Clone smtp2O365 repository
+  git:
+    repo: "https://github.com/hegusung/smtp2O365.git"
+    dest: "/opt/smtp2O365"
+    version: "main"
+    force: yes
+  when: smtp2O365.enabled | bool
+
+- name: smtp2O365 python dependencies
+  pip:
+    requirements: /opt/smtp2O365/requirements.txt
+    executable: pip3
+    extra_args: "--break-system-packages"
+  when: smtp2O365.enabled | bool
+
+- name: Generate the smtp2O365 service file
+  template:
+    src: templates/smtp2O365.service.j2
+    dest: /etc/systemd/system/smtp2O365.service
+    owner: root
+    group: root
+    mode: '0644'
+  when: smtp2O365.enabled | bool
+
+- name: Start and enable smtp2O365 service
+  service:
+    name: smtp2O365
+    state: started
+    enabled: yes
+  when: smtp2O365.enabled | bool
 
 

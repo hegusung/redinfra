@@ -1,0 +1,19 @@
+[Unit]
+Description=SMTP to Microsoft Graph relay proxy
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+
+WorkingDirectory=/opt/smtp2O365
+ExecStart=/usr/bin/python3 /opt/smtp2O365/smtp2O365.py
+Restart=on-failure
+RestartSec=5
+
+Environment="AZURE_TENANT_ID={{ smtp2O365.tenant_id }}"
+Environment="AZURE_CLIENT_ID={{ smtp2O365.client_id }}"
+Environment="AZURE_CLIENT_SECRET={{ smtp2O365.client_secret }}"
+
+[Install]
+WantedBy=multi-user.target
