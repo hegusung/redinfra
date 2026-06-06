@@ -1,0 +1,14 @@
+---
+- name: Install Payload Server and Mythic Payload automation
+  hosts: host
+  gather_facts: no
+  become: yes
+  tasks:
+    - name: Install and configure Payload Server
+      include_role:
+        name: payload_server
+        tasks_from: setup_payload_server.yml
+    - name: Install and configure Mythic payload automation
+      include_role:
+        name: payload_server
+        tasks_from: setup_mythic_payload_automation.yml

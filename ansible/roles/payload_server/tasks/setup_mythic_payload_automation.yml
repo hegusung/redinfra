@@ -1,0 +1,40 @@
+- name: Update package cache
+  apt:
+    update_cache: yes
+
+- name: Install required packages
+  apt:
+    name:
+      - git
+      - python3
+      - python3-pip
+    state: present
+    update_cache: yes
+
+- name: Clone Mythic payload automation repository
+  git:
+    repo: "https://github.com/hegusung/mythic_payload_automation_webapp.git"
+    dest: "/opt/mythic_payload_automation"
+    version: main
+    update: yes
+
+- name: Template .env file
+  ansible.builtin.template:
+    src: mythic_payload_automation.env.j2
+    dest: "/opt/mythic_payload_automation/.env"
+    owner: root
+    group: root
+    mode: "0640"
+
+- name: Start and enable Docker service
+  ansible.builtin.service:
+    name: docker
+    state: started
+    enabled: yes
+
+- name: 
+  shell: docker compose up -d --build
+  args:
+    chdir: "/opt/mythic_payload_automation"
+
+
