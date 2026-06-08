@@ -61,6 +61,10 @@ resource "aws_instance" "ec2_vpn" {
   subnet_id     = aws_subnet.main_subnet_{{ region }}.id
   vpc_security_group_ids = [aws_security_group.sg_{{ name }}_{{ region }}.id]
 
+  lifecycle {
+    ignore_changes = [ami]
+  }
+
   tags = {
   {% for key, value in tags.items() %}
       {{ key }} = "{{ value }}",
