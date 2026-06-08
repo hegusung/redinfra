@@ -28,7 +28,8 @@ server {
     error_log  /var/log/nginx/{{ item["site"] }}.error.log;
 
 {% for location in item["locations"] %}
-    location {{ location["location"] }} {
+{% for location_value in [location["location"]] | flatten %}
+    location {{ location_value }} {
 
 {% if "backend_name" in location %}
 	set $backend_name "{{ location["backend_name"] }}";
@@ -86,6 +87,7 @@ server {
 {% endif %}
     }
 
+{% endfor %}
 {% endfor %}
 
 }
