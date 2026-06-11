@@ -26,13 +26,18 @@
     group: root
     mode: "0640"
 
+- name: Install docker 
+  shell: ./install_docker_ubuntu.sh
+  args:
+    chdir: "/opt/mythic_payload_automation"
+
 - name: Start and enable Docker service
   ansible.builtin.service:
     name: docker
     state: started
     enabled: yes
 
-- name: 
+- name: Docker compose up
   shell: docker compose up -d --build
   args:
     chdir: "/opt/mythic_payload_automation"
