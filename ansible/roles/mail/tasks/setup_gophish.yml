@@ -120,47 +120,6 @@
     chdir: "/opt/gophish"
   loop: "{{ mails }}"
 
-# Installing Nginx front
-- name: Install nginx
-  apt:
-    name: 
-      - nginx
-    state: present
-
-# Stop services if existing
-- name: Stop nginx service if present
-  service:
-    name: nginx
-    state: stopped
-  ignore_errors: yes
-
-- name: Generate nginx config files
-  template:
-    src: templates/nginx.conf.j2
-    dest: /etc/nginx/sites-available/{{ item }}.conf
-    owner: root
-    group: root
-    mode: '0644'
-  loop: "{{ web_domains }}"
-
-- name: Enable nginx site
-  file:
-    src: /etc/nginx/sites-available/{{ item }}.conf
-    dest: /etc/nginx/sites-enabled/{{ item }}.conf
-    state: link
-  loop: "{{ web_domains }}"
-
-- name: Create dir
-  shell: mkdir /var/www/{{ item }}
-  loop: "{{ web_domains }}"
-  ignore_errors: yes
-
-- name: Start and enable nginx service
-  service:
-    name: nginx
-    state: started
-    enabled: yes
-
 # SMTP2O365
 - name: Stop smtp2O365 service if present
   service:
