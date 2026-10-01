@@ -5,6 +5,7 @@
 - name: Install go and git
   apt:
     name: 
+      - python3-pip
       - golang-go
       - git
     state: present

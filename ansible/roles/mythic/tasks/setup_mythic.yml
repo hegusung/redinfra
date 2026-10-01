@@ -52,6 +52,18 @@
     chdir: "/opt/mythic"
   environment:
     MYTHIC_ADMIN_PASSWORD: "{{ mythic_password }}"
+  ignore_errors: true
+
+- name: Wait for services to stabilize
+  pause:
+    seconds: 15
+
+- name: Start again to catch nginx
+  shell: ./mythic-cli start
+  args:
+    chdir: "/opt/mythic"
+  environment:
+    MYTHIC_ADMIN_PASSWORD: "{{ mythic_password }}"
 
 - name: Install github extensions
   shell: "./mythic-cli install github {{ item }} -f"
