@@ -26,6 +26,13 @@
     line: "MYTHIC_ADMIN_PASSWORD={{ mythic_password }}"
     state: present
 
+- name: Set Mythic default operation in environment
+  lineinfile:
+    path: "/opt/mythic/.env"
+    create: yes
+    line: "DEFAULT_OPERATION_NAME={{ default_operation_name }}"
+    state: present
+
 - name: Build Mythic
   shell: ./install_docker_ubuntu.sh
   args:
