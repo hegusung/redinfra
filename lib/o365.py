@@ -376,6 +376,9 @@ class Tenant:
             # Add a DMARK
             yield {"label": "_dmarc.%s" % domain["id"], "recordType": "Txt", "text": "v=DMARC1; p=reject; pct=100;"}
 
+            yield {"label": "enterpriseregistration.%s" % domain["id"], "recordType": "CName", "canonicalName": "enterpriseregistration.windows.net"}
+            yield {"label": "enterpriseenrollment.%s" % domain["id"], "recordType": "CName", "canonicalName": "enterpriseenrollment-s.manage.microsoft.com"}
+
             #for key, value in self.config['domains'][domain['id']]['dkim'].items():
             #    yield {"label": "%s.%s" % (key, domain["id"]), "recordType": "CName", "canonicalName": value}
             try:
